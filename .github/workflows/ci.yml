@@ -1,0 +1,37 @@
+name: CI Manual Fallback
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lint-build-test:
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run lint
+      - run: npm run test:unit
+      - run: npm run build
+      - run: npm test
+      - name: Package extension
+        if: matrix.os == 'ubuntu-latest'
+        run: npm run package
+      - name: Azure DevOps notice
+        if: matrix.os == 'ubuntu-latest'
+        run: echo "Primary CI/CD runs in Azure DevOps. This GitHub workflow is manual fallback only."
+      - uses: actions/upload-artifact@v4
+        if: matrix.os == 'ubuntu-latest'
+        with:
+          name: kicadstudio-vsix
+          path: "*.vsix"

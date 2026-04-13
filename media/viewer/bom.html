@@ -1,0 +1,47 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src {{cspSource}};
+    style-src {{cspSource}} 'unsafe-inline';
+    font-src {{cspSource}};
+    img-src {{cspSource}} data:;
+  ">
+  <title>KiCad BOM</title>
+  <link rel="stylesheet" href="{{bomCssUri}}">
+</head>
+<body>
+  <div id="bom-app">
+    <div id="topbar">
+      <input id="search" aria-label="Search BOM" placeholder="Search reference, value, footprint, manufacturer">
+      <label><input id="toggle-dnp" type="checkbox"> Hide DNP</label>
+      <button id="btn-export-csv" aria-label="Export BOM as CSV">Export CSV</button>
+      <button id="btn-export-xlsx" aria-label="Export BOM as XLSX">Export XLSX</button>
+    </div>
+    <div id="statsbar">
+      <span id="summary-text" class="muted">No schematic opened.</span>
+    </div>
+    <div id="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th data-key="references">Reference</th>
+            <th data-key="quantity">Qty</th>
+            <th data-key="value">Value</th>
+            <th data-key="footprint">Footprint</th>
+            <th data-key="mpn">MPN</th>
+            <th data-key="manufacturer">Manufacturer</th>
+            <th data-key="lcsc">LCSC</th>
+            <th data-key="description">Description</th>
+          </tr>
+        </thead>
+        <tbody id="bom-rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <script src="{{scriptUri}}"></script>
+</body>
+</html>

@@ -1,0 +1,13 @@
+node_modules/
+dist/
+dist-ts/
+out/
+*.vsix
+*.log
+.DS_Store
+coverage/
+tmp/
+fab/
+.tmp-kicanvas-check/
+.vscode-test/
+TEMP_FOLDER/

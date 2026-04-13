@@ -1,0 +1,821 @@
+{
+  "name": "kicadstudio",
+  "displayName": "KiCad Studio",
+  "description": "The complete KiCad development environment for VS Code — view schematics & PCBs, run DRC/ERC, export production files, search components, and get AI-powered design assistance.",
+  "version": "1.0.0",
+  "publisher": "oaslananka",
+  "engines": {
+    "vscode": "^1.95.0",
+    "node": ">=20.0.0"
+  },
+  "categories": [
+    "Other",
+    "Linters",
+    "Visualization",
+    "Programming Languages",
+    "Formatters"
+  ],
+  "keywords": [
+    "kicad",
+    "pcb",
+    "schematic",
+    "eda",
+    "electronics",
+    "gerber",
+    "erc",
+    "drc",
+    "bom"
+  ],
+  "icon": "assets/icon.png",
+  "galleryBanner": {
+    "color": "#1a1a2e",
+    "theme": "dark"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://dev.azure.com/oaslananka/open-source/_git/kicad-studio"
+  },
+  "bugs": {
+    "url": "https://dev.azure.com/oaslananka/open-source/_git/kicad-studio"
+  },
+  "homepage": "https://dev.azure.com/oaslananka/open-source/_git/kicad-studio",
+  "license": "MIT",
+  "main": "./dist/extension.js",
+  "activationEvents": [
+    "workspaceContains:**/*.kicad_pro",
+    "workspaceContains:**/*.kicad_jobset",
+    "workspaceContains:**/*.kicad_sch",
+    "workspaceContains:**/*.kicad_pcb",
+    "onLanguage:kicad-schematic",
+    "onLanguage:kicad-pcb",
+    "onLanguage:kicad-symbol",
+    "onLanguage:kicad-footprint",
+    "onLanguage:kicad-project",
+    "onView:kicadstudio.projectTree",
+    "onView:kicadstudio.bomView",
+    "onView:kicadstudio.netlistView"
+  ],
+  "contributes": {
+    "languages": [
+      {
+        "id": "kicad-schematic",
+        "aliases": [
+          "KiCad Schematic",
+          "kicad_sch"
+        ],
+        "extensions": [
+          ".kicad_sch"
+        ],
+        "icon": {
+          "light": "assets/icon-light.png",
+          "dark": "assets/icon-dark.png"
+        },
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "kicad-pcb",
+        "aliases": [
+          "KiCad PCB",
+          "kicad_pcb"
+        ],
+        "extensions": [
+          ".kicad_pcb"
+        ],
+        "icon": {
+          "light": "assets/icon-light.png",
+          "dark": "assets/icon-dark.png"
+        },
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "kicad-symbol",
+        "aliases": [
+          "KiCad Symbol Library"
+        ],
+        "extensions": [
+          ".kicad_sym"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "kicad-footprint",
+        "aliases": [
+          "KiCad Footprint"
+        ],
+        "extensions": [
+          ".kicad_mod"
+        ],
+        "configuration": "./language-configuration.json"
+      },
+      {
+        "id": "kicad-project",
+        "aliases": [
+          "KiCad Project"
+        ],
+        "extensions": [
+          ".kicad_pro",
+          ".kicad_jobset"
+        ],
+        "configuration": "./language-configuration.json"
+      }
+    ],
+    "grammars": [
+      {
+        "language": "kicad-schematic",
+        "scopeName": "source.kicad.sch",
+        "path": "./syntaxes/kicad-schematic.tmLanguage.json"
+      },
+      {
+        "language": "kicad-pcb",
+        "scopeName": "source.kicad.pcb",
+        "path": "./syntaxes/kicad-pcb.tmLanguage.json"
+      },
+      {
+        "language": "kicad-symbol",
+        "scopeName": "source.kicad.sym",
+        "path": "./syntaxes/kicad-symbol.tmLanguage.json"
+      },
+      {
+        "language": "kicad-footprint",
+        "scopeName": "source.kicad.mod",
+        "path": "./syntaxes/kicad-footprint.tmLanguage.json"
+      },
+      {
+        "language": "kicad-project",
+        "scopeName": "source.kicad.pro",
+        "path": "./syntaxes/kicad-project.tmLanguage.json"
+      }
+    ],
+    "jsonValidation": [
+      {
+        "fileMatch": [
+          "*.kicad_pro"
+        ],
+        "url": "./schemas/kicad-project.schema.json"
+      }
+    ],
+    "customEditors": [
+      {
+        "viewType": "kicadstudio.schematicViewer",
+        "displayName": "KiCad Schematic Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.kicad_sch"
+          }
+        ],
+        "priority": "default"
+      },
+      {
+        "viewType": "kicadstudio.pcbViewer",
+        "displayName": "KiCad PCB Viewer",
+        "selector": [
+          {
+            "filenamePattern": "*.kicad_pcb"
+          }
+        ],
+        "priority": "default"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "kicadstudio-sidebar",
+          "title": "KiCad Studio",
+          "icon": "assets/icon-dark.png"
+        }
+      ]
+    },
+    "views": {
+      "kicadstudio-sidebar": [
+        {
+          "id": "kicadstudio.projectTree",
+          "name": "KiCad Project"
+        },
+        {
+          "id": "kicadstudio.bomView",
+          "name": "Bill of Materials",
+          "when": "kicadstudio.schematicOpen"
+        },
+        {
+          "id": "kicadstudio.netlistView",
+          "name": "Netlist",
+          "when": "kicadstudio.schematicOpen"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "kicadstudio.projectTree",
+        "contents": "Open a folder containing a `.kicad_pro`, `.kicad_sch`, or `.kicad_pcb` file to start using KiCad Studio.\n[Open Folder](command:workbench.action.files.openFolder)"
+      },
+      {
+        "view": "kicadstudio.bomView",
+        "contents": "Open a schematic file to see its BOM here."
+      },
+      {
+        "view": "kicadstudio.netlistView",
+        "contents": "Open a schematic file to inspect its netlist here."
+      }
+    ],
+    "commands": [
+      {
+        "command": "kicadstudio.openSchematic",
+        "title": "KiCad: Open as Schematic Viewer",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.openPCB",
+        "title": "KiCad: Open as PCB Viewer",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.openInKiCad",
+        "title": "KiCad: Open in KiCad Application",
+        "category": "KiCad",
+        "icon": "$(link-external)"
+      },
+      {
+        "command": "kicadstudio.showStatusMenu",
+        "title": "KiCad: Show Status Menu",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.detectCli",
+        "title": "KiCad: Detect kicad-cli",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.exportGerbers",
+        "title": "KiCad: Export Gerber Files",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportGerbersWithDrill",
+        "title": "KiCad: Export Gerbers + Drill Files",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportPDF",
+        "title": "KiCad: Export PDF (Schematic)",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportPCBPDF",
+        "title": "KiCad: Export PDF (PCB)",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportSVG",
+        "title": "KiCad: Export SVG",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportIPC2581",
+        "title": "KiCad: Export IPC-2581",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportODB",
+        "title": "KiCad: Export ODB++",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.export3DGLB",
+        "title": "KiCad: Export 3D Model (GLB)",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.export3DBREP",
+        "title": "KiCad: Export 3D Model (BREP)",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.export3DPLY",
+        "title": "KiCad: Export 3D Model (PLY)",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportGenCAD",
+        "title": "KiCad: Export GenCAD",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportIPCD356",
+        "title": "KiCad: Export IPC-D-356 Netlist",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportDXF",
+        "title": "KiCad: Export DXF",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportPickAndPlace",
+        "title": "KiCad: Export Pick and Place",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportFootprintSVG",
+        "title": "KiCad: Export Footprint SVG",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportSymbolSVG",
+        "title": "KiCad: Export Symbol SVG",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportManufacturingPackage",
+        "title": "KiCad: Export Manufacturing Package",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportBOMCSV",
+        "title": "KiCad: Export Bill of Materials (CSV)",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportBOMXLSX",
+        "title": "KiCad: Export Bill of Materials (XLSX)",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.exportNetlist",
+        "title": "KiCad: Export Netlist",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.runJobset",
+        "title": "KiCad: Run Jobset",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.exportInteractiveBOM",
+        "title": "KiCad: Export Interactive HTML BOM",
+        "category": "KiCad Export"
+      },
+      {
+        "command": "kicadstudio.runDRC",
+        "title": "KiCad: Run Design Rule Check (DRC)",
+        "category": "KiCad Check"
+      },
+      {
+        "command": "kicadstudio.runERC",
+        "title": "KiCad: Run Electrical Rule Check (ERC)",
+        "category": "KiCad Check"
+      },
+      {
+        "command": "kicadstudio.searchComponent",
+        "title": "KiCad: Search Component (Octopart/Nexar, LCSC)",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.showDiff",
+        "title": "KiCad: Show Visual Diff (Git)",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.aiAnalyzeError",
+        "title": "KiCad: AI Analyze Selected Error",
+        "category": "KiCad AI"
+      },
+      {
+        "command": "kicadstudio.aiExplainCircuit",
+        "title": "KiCad: AI Explain Selected Block",
+        "category": "KiCad AI"
+      },
+      {
+        "command": "kicadstudio.refreshProjectTree",
+        "title": "KiCad: Refresh Project Tree",
+        "category": "KiCad",
+        "icon": "$(refresh)"
+      },
+      {
+        "command": "kicadstudio.saveExportPreset",
+        "title": "KiCad: Save Export Preset",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.runExportPreset",
+        "title": "KiCad: Run Export Preset",
+        "category": "KiCad"
+      },
+      {
+        "command": "kicadstudio.setOctopartApiKey",
+        "title": "KiCad: Set Octopart/Nexar API Key",
+        "category": "KiCad Setup"
+      },
+      {
+        "command": "kicadstudio.setAiApiKey",
+        "title": "KiCad: Set AI API Key",
+        "category": "KiCad Setup"
+      },
+      {
+        "command": "kicadstudio.clearSecrets",
+        "title": "KiCad: Clear Stored Secrets",
+        "category": "KiCad Setup"
+      }
+    ],
+    "menus": {
+      "explorer/context": [
+        {
+          "when": "resourceExtname == .kicad_sch",
+          "command": "kicadstudio.openSchematic",
+          "group": "navigation"
+        },
+        {
+          "when": "resourceExtname == .kicad_pcb",
+          "command": "kicadstudio.openPCB",
+          "group": "navigation"
+        },
+        {
+          "when": "resourceExtname =~ /\\.kicad_(sch|pcb|sym|mod|pro)/",
+          "command": "kicadstudio.openInKiCad",
+          "group": "navigation"
+        },
+        {
+          "when": "resourceExtname == .kicad_jobset",
+          "command": "kicadstudio.runJobset",
+          "group": "navigation"
+        }
+      ],
+      "editor/title": [
+        {
+          "when": "activeCustomEditorId == kicadstudio.schematicViewer || activeCustomEditorId == kicadstudio.pcbViewer",
+          "command": "kicadstudio.openInKiCad",
+          "group": "navigation"
+        }
+      ],
+      "view/title": [
+        {
+          "view": "kicadstudio.projectTree",
+          "command": "kicadstudio.refreshProjectTree",
+          "group": "navigation"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "kicadstudio.exportGerbers",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.exportIPC2581",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.export3DGLB",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.export3DBREP",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.export3DPLY",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.exportGenCAD",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.exportIPCD356",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.exportDXF"
+        },
+        {
+          "command": "kicadstudio.exportPickAndPlace",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.exportManufacturingPackage",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.exportFootprintSVG"
+        },
+        {
+          "command": "kicadstudio.exportSymbolSVG"
+        },
+        {
+          "command": "kicadstudio.runJobset"
+        },
+        {
+          "command": "kicadstudio.runDRC",
+          "when": "kicadstudio.pcbOpen"
+        },
+        {
+          "command": "kicadstudio.runERC",
+          "when": "kicadstudio.schematicOpen"
+        },
+        {
+          "command": "kicadstudio.exportPDF",
+          "when": "kicadstudio.schematicOpen"
+        },
+        {
+          "command": "kicadstudio.exportBOMCSV",
+          "when": "kicadstudio.schematicOpen"
+        },
+        {
+          "command": "kicadstudio.aiAnalyzeError",
+          "when": "kicadstudio.aiEnabled"
+        },
+        {
+          "command": "kicadstudio.aiExplainCircuit",
+          "when": "kicadstudio.aiEnabled"
+        },
+        {
+          "command": "kicadstudio.showStatusMenu"
+        }
+      ]
+    },
+    "keybindings": [
+      {
+        "command": "kicadstudio.runDRC",
+        "key": "ctrl+shift+d",
+        "mac": "cmd+shift+d",
+        "when": "kicadstudio.pcbOpen"
+      },
+      {
+        "command": "kicadstudio.runERC",
+        "key": "ctrl+shift+e",
+        "mac": "cmd+shift+e",
+        "when": "kicadstudio.schematicOpen"
+      },
+      {
+        "command": "kicadstudio.exportGerbers",
+        "key": "ctrl+shift+g",
+        "mac": "cmd+shift+g",
+        "when": "kicadstudio.pcbOpen"
+      }
+    ],
+    "configuration": {
+      "title": "KiCad Studio",
+      "properties": {
+        "kicadstudio.kicadCliPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to kicad-cli executable. Leave empty for auto-detection."
+        },
+        "kicadstudio.kicadPath": {
+          "type": "string",
+          "default": "",
+          "description": "Path to KiCad installation directory (used to open files in KiCad)."
+        },
+        "kicadstudio.defaultOutputDir": {
+          "type": "string",
+          "default": "fab",
+          "description": "Default output directory for exports (relative to project root)."
+        },
+        "kicadstudio.gerber.precision": {
+          "type": "number",
+          "default": 6,
+          "enum": [
+            5,
+            6
+          ],
+          "description": "Gerber file precision (number of digits)."
+        },
+        "kicadstudio.gerber.useProtelExtension": {
+          "type": "boolean",
+          "default": false,
+          "description": "Use Protel file extensions for Gerber files."
+        },
+        "kicadstudio.ipc2581.version": {
+          "type": "string",
+          "default": "C",
+          "enum": [
+            "B",
+            "C"
+          ],
+          "description": "IPC-2581 standard version."
+        },
+        "kicadstudio.ipc2581.units": {
+          "type": "string",
+          "default": "mm",
+          "enum": [
+            "mm",
+            "in"
+          ],
+          "description": "Units for IPC-2581 export."
+        },
+        "kicadstudio.bom.groupIdentical": {
+          "type": "boolean",
+          "default": true,
+          "description": "Group identical components in BOM."
+        },
+        "kicadstudio.bom.fields": {
+          "type": "array",
+          "default": [
+            "Reference",
+            "Value",
+            "Footprint",
+            "Quantity",
+            "MPN",
+            "Manufacturer",
+            "Description"
+          ],
+          "description": "BOM fields to include and their order."
+        },
+        "kicadstudio.viewer.theme": {
+          "type": "string",
+          "default": "dark",
+          "enum": [
+            "dark",
+            "light",
+            "kicad"
+          ],
+          "description": "Color theme for schematic and PCB viewers."
+        },
+        "kicadstudio.viewer.autoRefresh": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically refresh viewer when file is saved."
+        },
+        "kicadstudio.componentSearch.enableLCSC": {
+          "type": "boolean",
+          "default": true,
+          "description": "Enable LCSC component search."
+        },
+        "kicadstudio.ai.provider": {
+          "type": "string",
+          "default": "none",
+          "enum": [
+            "none",
+            "claude",
+            "openai"
+          ],
+          "description": "AI provider for circuit analysis and error explanation."
+        },
+        "kicadstudio.ai.model": {
+          "type": "string",
+          "default": "",
+          "description": "Optional AI model override. Leave empty to use the provider default: claude-sonnet-4-6 for Claude or gpt-4.1 for OpenAI."
+        },
+        "kicadstudio.ai.openaiApiMode": {
+          "type": "string",
+          "default": "responses",
+          "enum": [
+            "responses",
+            "chat-completions"
+          ],
+          "description": "OpenAI API mode. Responses is the default for new work; Chat Completions is retained for compatibility."
+        },
+        "kicadstudio.ai.language": {
+          "type": "string",
+          "default": "en",
+          "enum": [
+            "en",
+            "tr",
+            "de",
+            "zh-CN",
+            "ja"
+          ],
+          "description": "Language for AI-generated answers. Extension UI language follows VS Code locale packs."
+        },
+        "kicadstudio.drc.autoRunOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically run DRC when PCB file is saved."
+        },
+        "kicadstudio.erc.autoRunOnSave": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically run ERC when schematic file is saved."
+        },
+        "kicadstudio.exportPresets": {
+          "type": "array",
+          "default": [],
+          "description": "Saved export presets managed by the extension."
+        }
+      }
+    },
+    "taskDefinitions": [
+      {
+        "type": "kicad",
+        "required": [
+          "task",
+          "file"
+        ],
+        "properties": {
+          "task": {
+            "type": "string",
+            "description": "KiCad task type"
+          },
+          "file": {
+            "type": "string",
+            "description": "Target .kicad_pcb or .kicad_sch file"
+          },
+          "outputDir": {
+            "type": "string",
+            "description": "Output directory"
+          }
+        }
+      }
+    ],
+    "snippets": [
+      {
+        "language": "kicad-schematic",
+        "path": "./snippets/kicad.code-snippets"
+      },
+      {
+        "language": "kicad-pcb",
+        "path": "./snippets/kicad.code-snippets"
+      }
+    ],
+    "walkthroughs": [
+      {
+        "id": "kicadstudio.gettingStarted",
+        "title": "Getting Started with KiCad Studio",
+        "description": "Set up KiCad Studio for your first project.",
+        "steps": [
+          {
+            "id": "kicadstudio.step.detectCli",
+            "title": "Detect kicad-cli",
+            "description": "KiCad Studio uses kicad-cli for exports and checks. [Detect automatically](command:kicadstudio.detectCli)",
+            "media": {
+              "altText": "kicad-cli detection",
+              "image": "assets/screenshots/schematic-viewer.png"
+            },
+            "completionEvents": [
+              "onCommand:kicadstudio.detectCli"
+            ]
+          },
+          {
+            "id": "kicadstudio.step.openProject",
+            "title": "Open a KiCad Project",
+            "description": "Open a folder containing a .kicad_pro file. [Open folder](command:workbench.action.files.openFolder)",
+            "media": {
+              "altText": "project tree",
+              "image": "assets/screenshots/schematic-viewer.png"
+            },
+            "completionEvents": [
+              "onContext:kicadstudio.hasProject"
+            ]
+          },
+          {
+            "id": "kicadstudio.step.viewer",
+            "title": "View your Schematic",
+            "description": "Click any .kicad_sch file to open the interactive viewer.",
+            "media": {
+              "altText": "schematic viewer",
+              "image": "assets/screenshots/schematic-viewer.png"
+            },
+            "completionEvents": [
+              "onContext:kicadstudio.schematicOpen"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "scripts": {
+    "prepare:media": "node scripts/generate-icon.js && node scripts/bundle-kicanvas.js",
+    "vscode:prepublish": "npm run build:prod",
+    "build": "npm run prepare:media && webpack --mode development",
+    "build:prod": "npm run prepare:media && webpack --mode production",
+    "watch": "webpack --mode development --watch",
+    "lint": "eslint src test scripts --ext .ts,.js",
+    "compile-tests": "tsc -p tsconfig.test.json",
+    "test": "node ./out/test/runTest.js",
+    "test:unit": "jest --runInBand",
+    "check:bundle-size": "node scripts/check-bundle-size.js",
+    "bundle-kicanvas": "node scripts/bundle-kicanvas.js",
+    "package": "vsce package --baseContentUrl \"https://dev.azure.com/oaslananka/open-source/_git/kicad-studio?path=/\" --baseImagesUrl \"https://dev.azure.com/oaslananka/open-source/_apis/git/repositories/kicad-studio/items?versionDescriptor.version=main&versionDescriptor.versionType=branch&download=false&api-version=7.1&path=/\"",
+    "package:ls": "vsce ls --baseContentUrl \"https://dev.azure.com/oaslananka/open-source/_git/kicad-studio?path=/\" --baseImagesUrl \"https://dev.azure.com/oaslananka/open-source/_apis/git/repositories/kicad-studio/items?versionDescriptor.version=main&versionDescriptor.versionType=branch&download=false&api-version=7.1&path=/\"",
+    "publish": "vsce publish --baseContentUrl \"https://dev.azure.com/oaslananka/open-source/_git/kicad-studio?path=/\" --baseImagesUrl \"https://dev.azure.com/oaslananka/open-source/_apis/git/repositories/kicad-studio/items?versionDescriptor.version=main&versionDescriptor.versionType=branch&download=false&api-version=7.1&path=/\"",
+    "pretest": "npm run build && npm run compile-tests"
+  },
+  "devDependencies": {
+    "@eslint/js": "^10.0.1",
+    "@types/jest": "^30.0.0",
+    "@types/mocha": "^10.0.10",
+    "@types/node": "^20.0.0",
+    "@types/vscode": "^1.95.0",
+    "@typescript-eslint/eslint-plugin": "^8.58.1",
+    "@typescript-eslint/parser": "^8.58.1",
+    "@vscode/test-electron": "^2.5.2",
+    "@vscode/vsce": "^3.7.1",
+    "eslint": "^10.2.0",
+    "jest": "^30.3.0",
+    "mocha": "^11.7.5",
+    "pngjs": "^7.0.0",
+    "prettier": "^3.8.2",
+    "ts-jest": "^29.4.9",
+    "ts-loader": "^9.5.7",
+    "typescript": "^6.0.2",
+    "webpack": "^5.106.1",
+    "webpack-cli": "^7.0.2"
+  },
+  "dependencies": {
+    "exceljs": "^4.4.0"
+  },
+  "overrides": {
+    "mocha": {
+      "diff": "^8.0.4",
+      "serialize-javascript": "^7.0.5"
+    }
+  }
+}

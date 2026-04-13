@@ -1,0 +1,33 @@
+{
+  "compilerOptions": {
+    "module": "commonjs",
+    "target": "ES2022",
+    "outDir": "dist-ts",
+    "lib": [
+      "ES2022",
+      "DOM"
+    ],
+    "sourceMap": true,
+    "rootDir": ".",
+    "strict": true,
+    "moduleResolution": "node",
+    "ignoreDeprecations": "6.0",
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "forceConsistentCasingInFileNames": true,
+    "resolveJsonModule": true,
+    "types": [
+      "node",
+      "vscode",
+      "jest"
+    ]
+  },
+  "include": [
+    "src/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "out",
+    "node_modules"
+  ]
+}

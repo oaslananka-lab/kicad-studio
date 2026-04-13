@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src {{cspSource}};
+    style-src {{cspSource}} 'unsafe-inline';
+  ">
+  <title>KiCad Netlist</title>
+  <link rel="stylesheet" href="{{bomCssUri}}">
+</head>
+<body>
+  <div id="bom-app">
+    <div id="statsbar">
+      <span id="summary-text" class="muted">No schematic opened.</span>
+    </div>
+    <div id="table-wrapper">
+      <table>
+        <thead>
+          <tr>
+            <th>Net</th>
+            <th>Nodes</th>
+          </tr>
+        </thead>
+        <tbody id="netlist-rows"></tbody>
+      </table>
+    </div>
+  </div>
+  <script src="{{scriptUri}}"></script>
+</body>
+</html>

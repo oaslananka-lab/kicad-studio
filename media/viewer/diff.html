@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta http-equiv="Content-Security-Policy" content="
+    default-src 'none';
+    script-src {{cspSource}};
+    style-src {{cspSource}} 'unsafe-inline';
+    font-src {{cspSource}};
+    img-src {{cspSource}} data:;
+  ">
+  <title>KiCad Visual Diff</title>
+  <link rel="stylesheet" href="{{viewerCssUri}}">
+</head>
+<body>
+  <div id="viewer-shell">
+    <div id="toolbar">
+      <span id="status-text">Preparing diff…</span>
+    </div>
+    <div id="viewer-layout">
+      <aside id="side-panel">
+        <h3>Changes</h3>
+        <div id="diff-list" class="layer-list"></div>
+      </aside>
+      <div style="display:grid; grid-template-columns: 1fr 1fr; min-height:0;">
+        <div id="viewer-container">
+          <kicanvas-embed id="viewer-left"></kicanvas-embed>
+        </div>
+        <div id="viewer-container">
+          <kicanvas-embed id="viewer-right"></kicanvas-embed>
+        </div>
+      </div>
+    </div>
+  </div>
+  <script src="{{kicanvasUri}}"></script>
+  <script src="{{scriptUri}}"></script>
+</body>
+</html>
