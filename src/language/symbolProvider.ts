@@ -44,6 +44,9 @@ export class KiCadSymbolProvider implements vscode.DocumentSymbolProvider {
       return undefined;
     }
     const first = node.children[0];
+    if (!first) {
+      return undefined;
+    }
     return first.type === 'atom' || first.type === 'string' ? String(first.value ?? '') : undefined;
   }
 

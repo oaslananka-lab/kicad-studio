@@ -18,7 +18,13 @@ suite('Extension Integration', () => {
       'kicadstudio.exportGerbers',
       'kicadstudio.runDRC',
       'kicadstudio.searchComponent',
-      'kicadstudio.showDiff'
+      'kicadstudio.showDiff',
+      'kicadstudio.openAiChat',
+      'kicadstudio.aiProactiveDRC',
+      'kicadstudio.testAiConnection',
+      'kicadstudio.searchLibrarySymbol',
+      'kicadstudio.searchLibraryFootprint',
+      'kicadstudio.reindexLibraries'
     ]) {
       assert.ok(commands.includes(command), `Missing command ${command}`);
     }

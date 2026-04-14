@@ -49,6 +49,6 @@ export class KiCadTaskProvider implements vscode.TaskProvider {
       return ['sch', 'erc', file];
     }
     const normalized = task as ExportCommandKind;
-    return buildCliExportCommands(normalized, file, outputDir)[0];
+    return buildCliExportCommands(normalized, file, outputDir)[0] ?? [];
   }
 }

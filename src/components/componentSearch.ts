@@ -2,15 +2,17 @@ import * as vscode from 'vscode';
 import { SEARCH_DEBOUNCE_MS, SETTINGS } from '../constants';
 import type { ComponentSearchResult } from '../types';
 import { openDatasheet } from './datasheetOpener';
+import { ComponentSearchCache } from './componentSearchCache';
 import { LcscClient } from './lcscClient';
 import { OctopartClient } from './octopartClient';
 
 export class ComponentSearchService {
-  private detailsPanel?: vscode.WebviewPanel;
+  private detailsPanel: vscode.WebviewPanel | undefined;
 
   constructor(
     private readonly octopart: OctopartClient,
-    private readonly lcsc: LcscClient
+    private readonly lcsc: LcscClient,
+    private readonly cache: ComponentSearchCache
   ) {}
 
   async search(): Promise<void> {
@@ -38,10 +40,13 @@ export class ComponentSearchService {
     const selectedSources = new Set(sourceChoices.map((item) => item.value));
 
     if (selectedSources.has('octopart')) {
-      results.push(...(await this.octopart.search(query).catch(() => [])));
+      results.push(...(await this.searchWithCache('octopart', query)));
     }
     if (selectedSources.has('lcsc')) {
-      results.push(...(await this.lcsc.search(query).catch(() => [])));
+      results.push(...(await this.searchWithCache('lcsc', query)));
+    }
+    if (!results.length && selectedSources.has('octopart') && vscode.workspace.getConfiguration().get<boolean>(SETTINGS.enableLCSC, true)) {
+      results.push(...(await this.searchWithCache('lcsc', query)));
     }
 
     const picked = await vscode.window.showQuickPick(
@@ -111,7 +116,33 @@ export class ComponentSearchService {
     document.getElementById('copy').addEventListener('click', () => vscode.postMessage({ type: 'copy-mpn', mpn: ${JSON.stringify(result.mpn)} }));
   </script>
 </body>
-</html>`;
+    </html>`;
+  }
+
+  private async searchWithCache(source: 'octopart' | 'lcsc', query: string): Promise<ComponentSearchResult[]> {
+    const key = ComponentSearchCache.buildKey(query, source);
+    const cached = await this.cache.get(key);
+    if (cached) {
+      return cached;
+    }
+
+    try {
+      const results =
+        source === 'octopart'
+          ? await this.octopart.search(query)
+          : await this.lcsc.search(query);
+      await this.cache.set(key, results, source, query);
+      return results;
+    } catch (error) {
+      if (source === 'octopart') {
+        void vscode.window.showWarningMessage(
+          `Octopart/Nexar search failed. Falling back to LCSC when available. ${
+            error instanceof Error ? error.message : String(error)
+          }`
+        );
+      }
+      return [];
+    }
   }
 }
 

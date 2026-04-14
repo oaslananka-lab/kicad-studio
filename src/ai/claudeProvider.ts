@@ -1,11 +1,37 @@
-import type { AIProvider } from '../types';
+import { AI_MAX_TOKENS, AI_STREAM_TIMEOUT_MS } from '../constants';
+import {
+  AIHttpError,
+  AIProviderNotConfiguredError,
+  AIRequestTimeoutError,
+  AIStreamAbortedError
+} from '../errors';
+import type { AIConnectionResult, AIProvider } from '../types';
 import { buildSystemPrompt, DEFAULT_AI_LANGUAGE } from './prompts';
+import { createManagedAbortSignal, readEventStream } from './providerUtils';
+
+interface ClaudeMessageBody {
+  model: string;
+  max_tokens: number;
+  system: string;
+  messages: Array<{
+    role: 'user';
+    content: string;
+  }>;
+  stream?: boolean;
+}
 
 interface ClaudeResponse {
   content?: Array<{
     type?: string;
     text?: string;
   }>;
+}
+
+interface ClaudeStreamDelta {
+  delta?: {
+    text?: string;
+  };
+  type?: string;
 }
 
 interface ClaudeErrorResponse {
@@ -15,8 +41,9 @@ interface ClaudeErrorResponse {
   };
 }
 
-const REQUEST_TIMEOUT_MS = 30_000;
-
+/**
+ * Anthropic Claude provider for KiCad analysis requests.
+ */
 export class ClaudeProvider implements AIProvider {
   readonly name = 'Claude';
 
@@ -29,19 +56,15 @@ export class ClaudeProvider implements AIProvider {
     return Boolean(this.apiKey);
   }
 
-  async analyze(prompt: string, context: string, systemPrompt = buildSystemPrompt(DEFAULT_AI_LANGUAGE)): Promise<string> {
-    const response = await this.request({
-      model: this.model,
-      max_tokens: 1200,
-      system: systemPrompt,
-      messages: [
-        {
-          role: 'user',
-          content: `${prompt}\n\nContext:\n${context}`
-        }
-      ]
-    });
-
+  async analyze(
+    prompt: string,
+    context: string,
+    systemPrompt = buildSystemPrompt(DEFAULT_AI_LANGUAGE)
+  ): Promise<string> {
+    const response = await this.request(
+      this.buildRequestBody(prompt, context, systemPrompt),
+      undefined
+    );
     const json = (await response.json()) as ClaudeResponse;
     return (
       json.content
@@ -52,14 +75,82 @@ export class ClaudeProvider implements AIProvider {
     );
   }
 
-  private async request(body: unknown): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  async analyzeStream(
+    prompt: string,
+    context: string,
+    systemPrompt: string | undefined,
+    onChunk: (text: string) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    const response = await this.request(
+      {
+        ...this.buildRequestBody(prompt, context, systemPrompt ?? buildSystemPrompt(DEFAULT_AI_LANGUAGE)),
+        stream: true
+      },
+      signal
+    );
 
+    await readEventStream(response, async (eventName, payload) => {
+      if (!payload || payload === '[DONE]') {
+        return;
+      }
+      if (eventName === 'message_stop') {
+        return;
+      }
+      let parsed: ClaudeStreamDelta;
+      try {
+        parsed = JSON.parse(payload) as ClaudeStreamDelta;
+      } catch {
+        return;
+      }
+      if (parsed.delta?.text) {
+        onChunk(parsed.delta.text);
+      }
+    });
+  }
+
+  async testConnection(): Promise<AIConnectionResult> {
+    const startedAt = Date.now();
+    try {
+      await this.analyze(
+        'Reply with the single word OK.',
+        'Connectivity test from KiCad Studio.',
+        buildSystemPrompt(DEFAULT_AI_LANGUAGE)
+      );
+      return { ok: true, latencyMs: Date.now() - startedAt };
+    } catch (error) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  private buildRequestBody(prompt: string, context: string, systemPrompt: string): ClaudeMessageBody {
+    return {
+      model: this.model,
+      max_tokens: AI_MAX_TOKENS,
+      system: systemPrompt,
+      messages: [
+        {
+          role: 'user',
+          content: `${prompt}\n\nContext:\n${context}`
+        }
+      ]
+    };
+  }
+
+  private async request(body: ClaudeMessageBody, signal?: AbortSignal): Promise<Response> {
+    if (!this.isConfigured()) {
+      throw new AIProviderNotConfiguredError();
+    }
+
+    const managedSignal = createManagedAbortSignal(this.name, AI_STREAM_TIMEOUT_MS, signal);
     try {
       const response = await fetch('https://api.anthropic.com/v1/messages', {
         method: 'POST',
-        signal: controller.signal,
+        signal: managedSignal.signal,
         headers: {
           'Content-Type': 'application/json',
           'x-api-key': this.apiKey,
@@ -69,22 +160,31 @@ export class ClaudeProvider implements AIProvider {
       });
 
       if (!response.ok) {
-        throw new Error(await this.formatHttpError(response));
+        throw new AIHttpError(await this.formatHttpError(response));
       }
 
       return response;
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new Error('Claude request timed out after 30 seconds. Check your connection and try again.', {
-          cause: error
-        });
+      if (managedSignal.wasTimeoutTriggered()) {
+        throw new AIRequestTimeoutError(this.name, AI_STREAM_TIMEOUT_MS);
       }
-      if (error instanceof Error) {
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new AIStreamAbortedError();
+      }
+      if (error instanceof AIHttpError) {
         throw error;
       }
-      throw new Error('Claude request failed due to an unknown network error.', { cause: error });
+      if (error instanceof AIRequestTimeoutError || error instanceof AIStreamAbortedError) {
+        throw error;
+      }
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new AIRequestTimeoutError(this.name, AI_STREAM_TIMEOUT_MS);
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('Claude request failed due to an unknown network error.', { cause: error });
     } finally {
-      clearTimeout(timeout);
+      managedSignal.cleanup();
     }
   }
 
@@ -95,7 +195,7 @@ export class ClaudeProvider implements AIProvider {
       const parsed = JSON.parse(bodyText) as ClaudeErrorResponse;
       apiMessage = parsed.error?.message || parsed.error?.type || apiMessage;
     } catch {
-      // Keep the raw response body if it was not JSON.
+      // Preserve non-JSON body text.
     }
 
     const prefix =

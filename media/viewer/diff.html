@@ -5,10 +5,12 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <meta http-equiv="Content-Security-Policy" content="
     default-src 'none';
-    script-src {{cspSource}};
+    script-src {{cspSource}} blob:;
     style-src {{cspSource}} 'unsafe-inline';
+    worker-src {{cspSource}} blob:;
+    connect-src {{cspSource}} blob: data:;
     font-src {{cspSource}};
-    img-src {{cspSource}} data:;
+    img-src {{cspSource}} data: blob:;
   ">
   <title>KiCad Visual Diff</title>
   <link rel="stylesheet" href="{{viewerCssUri}}">
@@ -18,17 +20,29 @@
     <div id="toolbar">
       <span id="status-text">Preparing diff…</span>
     </div>
-    <div id="viewer-layout">
+    <div id="viewer-layout" class="diff-layout">
       <aside id="side-panel">
         <h3>Changes</h3>
         <div id="diff-list" class="layer-list"></div>
       </aside>
-      <div style="display:grid; grid-template-columns: 1fr 1fr; min-height:0;">
-        <div id="viewer-container">
-          <kicanvas-embed id="viewer-left"></kicanvas-embed>
-        </div>
-        <div id="viewer-container">
-          <kicanvas-embed id="viewer-right"></kicanvas-embed>
+      <main id="diff-viewer-grid" class="diff-viewer-grid" aria-label="KiCad diff canvases">
+        <section class="diff-pane" aria-label="HEAD version">
+          <header class="diff-pane-title">HEAD</header>
+          <div id="viewer-left-container" class="viewer-container diff-canvas-mount">
+            <div class="diff-empty-state">Waiting for HEAD version…</div>
+          </div>
+        </section>
+        <section class="diff-pane" aria-label="Working tree version">
+          <header class="diff-pane-title">Working Tree</header>
+          <div id="viewer-right-container" class="viewer-container diff-canvas-mount">
+            <div class="diff-empty-state">Waiting for working tree version…</div>
+          </div>
+        </section>
+      </main>
+      <div id="error-overlay" hidden>
+        <div>
+          <strong id="error-message">Diff viewer error</strong>
+          <pre id="error-details"></pre>
         </div>
       </div>
     </div>

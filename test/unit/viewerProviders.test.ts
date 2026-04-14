@@ -1,4 +1,7 @@
 import * as vscode from 'vscode';
+import * as fs from 'node:fs';
+import * as os from 'node:os';
+import * as path from 'node:path';
 import { SchematicEditorProvider } from '../../src/providers/schematicEditorProvider';
 import { PcbEditorProvider } from '../../src/providers/pcbEditorProvider';
 import { __setConfiguration, workspace } from './vscodeMock';
@@ -19,12 +22,20 @@ function createPanel() {
   };
 
   let disposeCallback: (() => void) | undefined;
+  let viewStateCallback: ((event: { webviewPanel: unknown }) => void) | undefined;
   const panel = {
     webview,
     onDidDispose: jest.fn((callback: () => void) => {
       disposeCallback = callback;
       return { dispose: jest.fn() };
     }),
+    onDidChangeViewState: jest.fn((callback: (event: { webviewPanel: unknown }) => void) => {
+      viewStateCallback = callback;
+      return { dispose: jest.fn() };
+    }),
+    visible: true,
+    reveal: jest.fn(),
+    fireViewState: () => viewStateCallback?.({ webviewPanel: panel }),
     fireDispose: () => disposeCallback?.()
   };
 
@@ -36,14 +47,21 @@ describe.each([
   ['pcb', PcbEditorProvider, '.kicad_pcb', '(kicad_pcb (footprint "R1"))']
 ])('%s viewer provider', (_label, Provider, extension, sourceText) => {
   const ContextProvider = Provider as ProviderCtor;
+  let tempFile: string;
 
   beforeEach(() => {
     __setConfiguration({
       'kicadstudio.viewer.autoRefresh': true
     });
+    tempFile = path.join(os.tmpdir(), `kicadstudio-${Date.now()}${extension}`);
+    fs.writeFileSync(tempFile, sourceText, 'utf8');
     (workspace.fs.readFile as jest.Mock).mockReset();
     (workspace.fs.readFile as jest.Mock).mockResolvedValue(Buffer.from(sourceText, 'utf8'));
     (workspace.onDidSaveTextDocument as jest.Mock).mockClear();
+  });
+
+  afterEach(() => {
+    fs.rmSync(tempFile, { force: true });
   });
 
   it('writes HTML on initial load', async () => {
@@ -52,7 +70,7 @@ describe.each([
     } as vscode.ExtensionContext);
     const panel = createPanel();
     const document = {
-      uri: vscode.Uri.file(`/workspace/sample${extension}`)
+      uri: vscode.Uri.file(tempFile)
     } as vscode.CustomDocument;
 
     await provider.resolveCustomEditor(document, panel as unknown as vscode.WebviewPanel);
@@ -67,7 +85,7 @@ describe.each([
     } as vscode.ExtensionContext);
     const panel = createPanel();
     const document = {
-      uri: vscode.Uri.file(`/workspace/sample${extension}`)
+      uri: vscode.Uri.file(tempFile)
     } as vscode.CustomDocument;
 
     await provider.resolveCustomEditor(document, panel as unknown as vscode.WebviewPanel);
@@ -80,7 +98,7 @@ describe.each([
       expect.objectContaining({
         type: 'refresh',
         payload: expect.objectContaining({
-          fileName: `sample${extension}`
+          fileName: path.basename(tempFile)
         })
       })
     );
@@ -92,7 +110,7 @@ describe.each([
     } as vscode.ExtensionContext);
     const panel = createPanel();
     const document = {
-      uri: vscode.Uri.file(`/workspace/sample${extension}`)
+      uri: vscode.Uri.file(tempFile)
     } as vscode.CustomDocument;
 
     await provider.resolveCustomEditor(document, panel as unknown as vscode.WebviewPanel);

@@ -12,7 +12,7 @@ interface RawBomRow {
   lcsc: string;
   description: string;
   dnp: boolean;
-  uuid?: string;
+  uuid?: string | undefined;
 }
 
 export class BomParser {
@@ -101,13 +101,13 @@ export class BomParser {
 
     return {
       reference,
-      value: propertyMap.get('Value') ?? this.parser.getAtomValue(symbol, 'value') ?? '',
+      value: this.getProperty(propertyMap, 'Value') ?? this.parser.getAtomValue(symbol, 'value') ?? '',
       footprint:
-        propertyMap.get('Footprint') ?? this.parser.getAtomValue(symbol, 'footprint') ?? '',
-      mpn: propertyMap.get('MPN') ?? propertyMap.get('Part Number') ?? '',
-      manufacturer: propertyMap.get('Manufacturer') ?? '',
-      lcsc: propertyMap.get('LCSC') ?? propertyMap.get('LCSC Part') ?? '',
-      description: propertyMap.get('Description') ?? '',
+        this.getProperty(propertyMap, 'Footprint') ?? this.parser.getAtomValue(symbol, 'footprint') ?? '',
+      mpn: this.getProperty(propertyMap, 'MPN', 'Part Number') ?? '',
+      manufacturer: this.getProperty(propertyMap, 'Manufacturer') ?? '',
+      lcsc: this.getProperty(propertyMap, 'LCSC', 'LCSC Part', 'lcsc') ?? '',
+      description: this.getProperty(propertyMap, 'Description') ?? '',
       dnp,
       uuid: this.parser.getAtomValue(symbol, 'uuid')
     };
@@ -121,9 +121,21 @@ export class BomParser {
       if (!name || !value) {
         continue;
       }
-      result.set(String(name.value ?? ''), String(value.value ?? ''));
+      const normalizedName = String(name.value ?? '');
+      result.set(normalizedName, String(value.value ?? ''));
+      result.set(normalizedName.toLowerCase(), String(value.value ?? ''));
     }
     return result;
+  }
+
+  private getProperty(propertyMap: Map<string, string>, ...keys: string[]): string | undefined {
+    for (const key of keys) {
+      const value = propertyMap.get(key) ?? propertyMap.get(key.toLowerCase());
+      if (value) {
+        return value;
+      }
+    }
+    return undefined;
   }
 
   private getTag(node: SNode): string | undefined {

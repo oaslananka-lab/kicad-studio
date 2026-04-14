@@ -4,9 +4,11 @@ import type { DetectedKiCadCli, DiagnosticSummary } from '../types';
 
 export class KiCadStatusBar implements vscode.Disposable {
   private readonly item: vscode.StatusBarItem;
-  private cli?: DetectedKiCadCli;
-  private drc?: DiagnosticSummary;
-  private erc?: DiagnosticSummary;
+  private cli: DetectedKiCadCli | undefined;
+  private drc: DiagnosticSummary | undefined;
+  private erc: DiagnosticSummary | undefined;
+  private aiConfigured = false;
+  private aiHealthy: boolean | undefined;
 
   constructor(_context: vscode.ExtensionContext) {
     this.item = vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Right, 100);
@@ -22,22 +24,30 @@ export class KiCadStatusBar implements vscode.Disposable {
     cli?: DetectedKiCadCli | undefined;
     drc?: DiagnosticSummary | undefined;
     erc?: DiagnosticSummary | undefined;
+    aiConfigured?: boolean;
+    aiHealthy?: boolean | undefined;
   }): void {
     this.cli = update.cli ?? this.cli;
     this.drc = update.drc ?? this.drc;
     this.erc = update.erc ?? this.erc;
+    this.aiConfigured = update.aiConfigured ?? this.aiConfigured;
+    this.aiHealthy = update.aiHealthy ?? this.aiHealthy;
     this.render();
   }
 
   getSnapshot(): {
-    cli?: DetectedKiCadCli;
-    drc?: DiagnosticSummary;
-    erc?: DiagnosticSummary;
+    cli: DetectedKiCadCli | undefined;
+    drc: DiagnosticSummary | undefined;
+    erc: DiagnosticSummary | undefined;
+    aiConfigured: boolean;
+    aiHealthy: boolean | undefined;
   } {
     return {
       cli: this.cli,
       drc: this.drc,
-      erc: this.erc
+      erc: this.erc,
+      aiConfigured: this.aiConfigured,
+      aiHealthy: this.aiHealthy
     };
   }
 
@@ -66,8 +76,15 @@ export class KiCadStatusBar implements vscode.Disposable {
           ? `ERC: ${this.erc.warnings} ⚠`
           : 'ERC: ✓'
       : 'ERC: —';
+    const aiText = !this.aiConfigured
+      ? 'AI: ○'
+      : this.aiHealthy === false
+        ? 'AI: ◔'
+        : 'AI: ●';
 
-    this.item.text = `$(circuit-board) ${this.cli.versionLabel} | ${drcText} | ${ercText}`;
-    this.item.tooltip = `CLI: ${this.cli.path}`;
+    this.item.text = `$(circuit-board) ${this.cli.versionLabel} | ${drcText} | ${ercText} | ${aiText}`;
+    this.item.tooltip = `CLI: ${this.cli.path}\nAI: ${
+      !this.aiConfigured ? 'not configured' : this.aiHealthy === false ? 'configured, last check failed' : 'configured'
+    }`;
   }
 }

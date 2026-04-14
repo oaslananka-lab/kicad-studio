@@ -1,4 +1,5 @@
 import * as vscode from 'vscode';
+import type { ViewerState } from '../types';
 
 
 export interface KiCanvasViewerHtmlOptions {
@@ -11,6 +12,7 @@ export interface KiCanvasViewerHtmlOptions {
   base64: string;
   disabledReason: string;
   theme?: string;
+  restoreState?: ViewerState | undefined;
 }
 
 /**
@@ -35,7 +37,8 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
     fileType:       options.fileType,
     base64:         options.base64,
     disabledReason: options.disabledReason,
-    theme:          options.theme ?? 'kicad'
+    theme:          options.theme ?? 'kicad',
+    ...(options.restoreState ? { restoreState: options.restoreState } : {})
   };
 
   return /* html */`<!DOCTYPE html>
@@ -236,7 +239,7 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
     <div id="viewer-mount"></div>
 
     <!-- Loading overlay (shown while KiCanvas initializes) -->
-    <div id="loading-overlay" class="overlay">
+    <div id="loading-overlay" class="overlay" role="status" aria-label="Dosya yükleniyor...">
       <div id="loading-card" class="card" style="text-align:center">
         <div class="spinner" aria-hidden="true"></div>
         <strong>Loading KiCanvas renderer…</strong>
@@ -309,6 +312,11 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
       document.getElementById('viewer-payload').textContent || '{}'
     );
     let keydownHandler = null;
+    let localState = payload.restoreState || {
+      zoom: 1,
+      grid: false,
+      theme: payload.theme || 'kicad'
+    };
 
     // ── Button wiring ─────────────────────────────────────────────────────────
     document.getElementById('reload-btn').addEventListener('click', () => initViewer());
@@ -326,7 +334,15 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
           payload.disabledReason = msg.payload.disabledReason || '';
           payload.fileName       = msg.payload.fileName || payload.fileName;
           payload.theme          = msg.payload.theme || payload.theme;
+          payload.restoreState   = msg.payload.restoreState || payload.restoreState;
+          localState             = payload.restoreState || localState;
         }
+        void initViewer();
+      }
+      if (msg.type === 'setTheme') {
+        payload.theme = msg.payload?.theme || payload.theme;
+        payload.restoreState = msg.payload?.restoreState || payload.restoreState;
+        localState = payload.restoreState || localState;
         void initViewer();
       }
     });
@@ -427,6 +443,7 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
 
         // ── 6. Success ────────────────────────────────────────────────────────
         viewer.fitToScreen?.();
+        applyViewerState(viewer);
         hideAll();
         installKeyboardShortcuts(viewer);
         setStatus('Interactive renderer loaded: ' + payload.fileName);
@@ -578,6 +595,23 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
       vscode.postMessage({ type: 'openInKiCad' });
     }
 
+    function postViewerState() {
+      vscode.postMessage({
+        type: 'viewerState',
+        payload: localState
+      });
+    }
+
+    function applyViewerState(viewer) {
+      if (!payload.restoreState) {
+        postViewerState();
+        return;
+      }
+      viewer.setAttribute('theme', payload.restoreState.theme || payload.theme || 'kicad');
+      localState = payload.restoreState;
+      postViewerState();
+    }
+
     // ── State helpers ─────────────────────────────────────────────────────────
 
     function hideAll() {
@@ -627,9 +661,24 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
     function installKeyboardShortcuts(viewer) {
       clearKeyboardShortcuts();
       keydownHandler = (ev) => {
-        if (ev.key === 'f' || ev.key === 'F') viewer.fitToScreen?.();
-        if (ev.key === '+' || ev.key === '=') viewer.zoomIn?.();
-        if (ev.key === '-')                   viewer.zoomOut?.();
+        if (ev.key === 'f' || ev.key === 'F') {
+          viewer.fitToScreen?.();
+          localState = { ...localState, zoom: 1 };
+          postViewerState();
+        }
+        if (ev.key === '+' || ev.key === '=') {
+          viewer.zoomIn?.();
+          localState = { ...localState, zoom: Number((localState.zoom + 0.1).toFixed(2)) };
+          postViewerState();
+        }
+        if (ev.key === '-') {
+          viewer.zoomOut?.();
+          localState = { ...localState, zoom: Number(Math.max(0.1, localState.zoom - 0.1).toFixed(2)) };
+          postViewerState();
+        }
+        if (ev.key === 'r' || ev.key === 'R') {
+          vscode.postMessage({ type: 'requestRefresh' });
+        }
       };
       window.addEventListener('keydown', keydownHandler);
     }
@@ -678,6 +727,7 @@ interface ViewerPayload {
   base64:         string;
   disabledReason: string;
   theme:          string;
+  restoreState?: ViewerState | undefined;
 }
 
 export function escapeHtml(value: string): string {

@@ -38,7 +38,7 @@ export function getCliCandidates(platform = process.platform, configuredPath = '
 }
 
 export class KiCadCliDetector {
-  private detected?: DetectedKiCadCli;
+  private detected: DetectedKiCadCli | undefined;
   private readonly capabilityCache = new Map<string, boolean>();
   private warnedWorkspaceConfiguredPath = false;
 

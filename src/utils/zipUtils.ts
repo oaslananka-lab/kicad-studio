@@ -122,7 +122,7 @@ function createEndOfCentralDirectory(entryCount: number, centralSize: number, ce
 function crc32(data: Buffer): number {
   let crc = 0xffffffff;
   for (const byte of data) {
-    crc = CRC_TABLE[(crc ^ byte) & 0xff] ^ (crc >>> 8);
+    crc = (CRC_TABLE[(crc ^ byte) & 0xff] ?? 0) ^ (crc >>> 8);
   }
   return (crc ^ 0xffffffff) >>> 0;
 }

@@ -20,7 +20,7 @@ export interface CliResult<T = unknown> {
   stderr: string;
   exitCode: number;
   durationMs: number;
-  parsed?: T;
+  parsed?: T | undefined;
 }
 
 export interface DetectedKiCadCli {
@@ -34,7 +34,7 @@ export interface ViewerState {
   zoom: number;
   grid: boolean;
   theme: string;
-  selectedReference?: string;
+  selectedReference?: string | undefined;
 }
 
 export interface ViewerInboundMessage {
@@ -70,7 +70,7 @@ export interface BomEntry {
   lcsc: string;
   description: string;
   dnp: boolean;
-  uuid?: string;
+  uuid?: string | undefined;
 }
 
 export interface BomSummary {
@@ -104,7 +104,7 @@ export interface ComponentPriceBreak {
 
 export interface ComponentOffer {
   seller: string;
-  inventoryLevel?: number;
+  inventoryLevel?: number | undefined;
   prices: ComponentPriceBreak[];
 }
 
@@ -113,10 +113,10 @@ export interface ComponentSearchResult {
   mpn: string;
   manufacturer: string;
   description: string;
-  category?: string;
-  datasheetUrl?: string;
-  imageUrl?: string;
-  lcscPartNumber?: string;
+  category?: string | undefined;
+  datasheetUrl?: string | undefined;
+  imageUrl?: string | undefined;
+  lcscPartNumber?: string | undefined;
   offers: ComponentOffer[];
   specs: Array<{
     name: string;
@@ -128,8 +128,8 @@ export interface ComponentDiff {
   uuid: string;
   reference: string;
   type: 'added' | 'removed' | 'changed';
-  before?: Record<string, string>;
-  after?: Record<string, string>;
+  before?: Record<string, string> | undefined;
+  after?: Record<string, string> | undefined;
 }
 
 export interface DiffWebviewMessage {
@@ -139,9 +139,15 @@ export interface DiffWebviewMessage {
 
 export interface ExportPreset {
   name: string;
-  description?: string;
+  description?: string | undefined;
   commands: string[];
-  outputDir?: string;
+  outputDir?: string | undefined;
+}
+
+export interface AIConnectionResult {
+  ok: boolean;
+  latencyMs: number;
+  error?: string | undefined;
 }
 
 export interface DiagnosticSummary {
@@ -155,7 +161,7 @@ export interface DiagnosticSummary {
 export interface KiCadTaskDefinition extends vscode.TaskDefinition {
   task: string;
   file: string;
-  outputDir?: string;
+  outputDir?: string | undefined;
 }
 
 export interface ProjectTreeNode {
@@ -171,13 +177,21 @@ export interface ProjectTreeNode {
     | 'model'
     | 'file'
     | 'folder';
-  uri?: vscode.Uri;
-  children?: ProjectTreeNode[];
+  uri?: vscode.Uri | undefined;
+  children?: ProjectTreeNode[] | undefined;
 }
 
 export interface AIProvider {
   name: string;
   analyze(prompt: string, context: string, systemPrompt?: string): Promise<string>;
+  analyzeStream?(
+    prompt: string,
+    context: string,
+    systemPrompt: string | undefined,
+    onChunk: (text: string) => void,
+    signal?: AbortSignal
+  ): Promise<void>;
+  testConnection(): Promise<AIConnectionResult>;
   isConfigured(): boolean;
 }
 
@@ -192,5 +206,5 @@ export interface ParserError {
 export interface SchemaNodeDefinition {
   tag: string;
   description: string;
-  children?: string[];
+  children?: string[] | undefined;
 }

@@ -33,17 +33,28 @@ export type ExportCommandKind =
   | 'export-sch-bom'
   | 'export-netlist';
 
+export interface ExportCommandBuildOptions {
+  versionMajor?: number;
+  precision?: string;
+  ipcVersion?: string;
+  ipcUnits?: string;
+  theme?: string;
+  bomFields?: string[];
+}
+
 export function buildCliExportCommands(
   kind: ExportCommandKind,
   file: string,
-  outputDir: string
+  outputDir: string,
+  options: ExportCommandBuildOptions = {}
 ): string[][] {
   const config = vscode.workspace.getConfiguration();
-  const precision = String(config.get<number>(SETTINGS.gerberPrecision, 6));
-  const ipcVersion = config.get<string>(SETTINGS.ipcVersion, 'C');
-  const ipcUnits = config.get<string>(SETTINGS.ipcUnits, 'mm');
-  const theme = config.get<string>(SETTINGS.viewerTheme, 'dark');
-  const bomFields = config.get<string[]>(SETTINGS.bomFields, []);
+  const precision = options.precision ?? String(config.get<number>(SETTINGS.gerberPrecision, 6));
+  const ipcVersion = options.ipcVersion ?? config.get<string>(SETTINGS.ipcVersion, 'C');
+  const ipcUnits = options.ipcUnits ?? config.get<string>(SETTINGS.ipcUnits, 'mm');
+  const theme = options.theme ?? config.get<string>(SETTINGS.viewerTheme, 'dark');
+  const bomFields = options.bomFields ?? config.get<string[]>(SETTINGS.bomFields, []);
+  const versionMajor = options.versionMajor ?? 9;
 
   switch (kind) {
     case 'export-gerbers':
@@ -55,13 +66,12 @@ export function buildCliExportCommands(
         outputDir,
         '--layers',
         'F.Cu,B.Cu,F.SilkS,B.SilkS,F.Mask,B.Mask,Edge.Cuts,F.Fab,B.Fab,In1.Cu,In2.Cu',
-        '--precision',
-        precision,
+        ...(versionMajor >= 9 ? ['--precision', precision] : []),
         file
       ]];
     case 'export-gerbers-with-drill':
       return [
-        ...buildCliExportCommands('export-gerbers', file, outputDir),
+        ...buildCliExportCommands('export-gerbers', file, outputDir, options),
         [
           'pcb',
           'export',
@@ -159,6 +169,9 @@ export function buildCliExportCommands(
         file
       ]];
     case 'export-brep':
+      if (versionMajor < 8) {
+        return [];
+      }
       return [[
         'pcb',
         'export',
@@ -169,6 +182,9 @@ export function buildCliExportCommands(
         file
       ]];
     case 'export-ply':
+      if (versionMajor < 8) {
+        return [];
+      }
       return [[
         'pcb',
         'export',
@@ -275,7 +291,7 @@ export function buildCliExportCommands(
         file
       ]];
     default:
-      return buildCliExportCommands('export-sch-bom', file, outputDir);
+      return buildCliExportCommands('export-sch-bom', file, outputDir, options);
   }
 }
 
@@ -316,7 +332,11 @@ export class KiCadExportService {
       return;
     }
     const outputDir = this.resolveOutputDir(file);
-    await this.runCommandSequence(buildCliExportCommands('export-svg', file, outputDir), path.dirname(file), 'Exporting SVG');
+    await this.runCommandSequence(
+      buildCliExportCommands('export-svg', file, outputDir, await this.getBuildOptions()),
+      path.dirname(file),
+      'Exporting SVG'
+    );
     await this.showOutputFolder(outputDir);
   }
 
@@ -386,7 +406,11 @@ export class KiCadExportService {
       return;
     }
     const outputDir = this.resolveOutputDir(file);
-    await this.runCommandSequence(buildCliExportCommands('export-dxf', file, outputDir), path.dirname(file), 'Exporting DXF');
+    await this.runCommandSequence(
+      buildCliExportCommands('export-dxf', file, outputDir, await this.getBuildOptions()),
+      path.dirname(file),
+      'Exporting DXF'
+    );
     await this.showOutputFolder(outputDir);
   }
 
@@ -485,14 +509,14 @@ export class KiCadExportService {
     ensureDirectory(stagingDir);
 
     await this.runCommandSequence(
-      buildCliExportCommands('export-gerbers-with-drill', pcbFile, stagingDir),
+      buildCliExportCommands('export-gerbers-with-drill', pcbFile, stagingDir, await this.getBuildOptions()),
       path.dirname(pcbFile),
       `Exporting ${profile.label} manufacturing Gerbers`
     );
 
     if (await this.detector.hasCapability('pos')) {
       await this.runCommandSequence(
-        buildCliExportCommands('export-pos', pcbFile, stagingDir),
+        buildCliExportCommands('export-pos', pcbFile, stagingDir, await this.getBuildOptions()),
         path.dirname(pcbFile),
         `Exporting ${profile.label} pick-and-place`
       );
@@ -556,6 +580,7 @@ export class KiCadExportService {
       commands: picked.commands
     };
     await this.presets.save(preset);
+    await this.presets.rememberLastUsed(name);
     void vscode.window.showInformationMessage(`Saved export preset "${name}".`);
   }
 
@@ -573,6 +598,7 @@ export class KiCadExportService {
       return;
     }
 
+    await this.presets.rememberLastUsed(picked.preset.name);
     for (const command of picked.preset.commands) {
       await vscode.commands.executeCommand(command);
     }
@@ -611,17 +637,24 @@ export class KiCadExportService {
     }
 
     const outputDir = this.resolveOutputDir(file);
-    await this.runCommandSequence(buildCliExportCommands(kind, file, outputDir), path.dirname(file), title);
+    await this.runCommandSequence(
+      buildCliExportCommands(kind, file, outputDir, await this.getBuildOptions()),
+      path.dirname(file),
+      title
+    );
     await this.showOutputFolder(outputDir);
   }
 
   private async runCommandSequence(commands: string[][], cwd: string, title: string): Promise<void> {
     try {
-      for (const command of commands) {
+      for (const [index, command] of commands.entries()) {
         await this.runner.runWithProgress<string>({
           command,
           cwd,
-          progressTitle: title
+          progressTitle: `${title} (${index + 1}/${commands.length})`,
+          onProgress: (message) => {
+            this.logger.debug(`${title}: ${message}`);
+          }
         });
       }
     } catch (error) {
@@ -697,5 +730,18 @@ export class KiCadExportService {
     }
     const files = await vscode.workspace.findFiles('**/*.kicad_sch', '**/node_modules/**', 1);
     return files[0]?.fsPath;
+  }
+
+  private async getBuildOptions(): Promise<ExportCommandBuildOptions> {
+    const detected = await this.detector.detect();
+    const versionMajor = Number(detected?.version.split('.')[0] ?? '9');
+    return {
+      versionMajor,
+      precision: String(vscode.workspace.getConfiguration().get<number>(SETTINGS.gerberPrecision, 6)),
+      ipcVersion: vscode.workspace.getConfiguration().get<string>(SETTINGS.ipcVersion, 'C'),
+      ipcUnits: vscode.workspace.getConfiguration().get<string>(SETTINGS.ipcUnits, 'mm'),
+      theme: vscode.workspace.getConfiguration().get<string>(SETTINGS.viewerTheme, 'dark'),
+      bomFields: vscode.workspace.getConfiguration().get<string[]>(SETTINGS.bomFields, [])
+    };
   }
 }

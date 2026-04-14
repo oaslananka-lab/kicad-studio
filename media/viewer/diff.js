@@ -1,37 +1,207 @@
 (function () {
   const vscode = acquireVsCodeApi();
-  const left = document.getElementById('viewer-left');
-  const right = document.getElementById('viewer-right');
+  const leftContainer = document.getElementById('viewer-left-container');
+  const rightContainer = document.getElementById('viewer-right-container');
+  const viewerGrid = document.getElementById('diff-viewer-grid');
   const statusText = document.getElementById('status-text');
   const diffList = document.getElementById('diff-list');
-  let leftBlobUrl;
-  let rightBlobUrl;
+  const errorOverlay = document.getElementById('error-overlay');
+  const errorMessage = document.getElementById('error-message');
+  const errorDetails = document.getElementById('error-details');
 
-  function setBlob(viewer, base64, previous) {
-    if (previous.current) {
-      URL.revokeObjectURL(previous.current);
+  let leftViewer;
+  let rightViewer;
+
+  function decodeBase64Utf8(base64) {
+    const binary = atob(base64);
+    const bytes = new Uint8Array(binary.length);
+    for (let index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
     }
-    previous.current = URL.createObjectURL(new Blob([atob(base64)], { type: 'text/plain' }));
-    viewer.setAttribute('src', previous.current);
+    return new TextDecoder().decode(bytes);
+  }
+
+  async function waitForKiCanvas() {
+    await waitForDefinition('kicanvas-embed', 8000);
+    await waitForDefinition('kicanvas-source', 8000);
+  }
+
+  function waitForDefinition(tagName, timeoutMs) {
+    return Promise.race([
+      customElements.whenDefined(tagName),
+      new Promise((_, reject) => {
+        window.setTimeout(() => {
+          reject(new Error(`${tagName} was not registered by KiCanvas within ${timeoutMs / 1000}s.`));
+        }, timeoutMs);
+      })
+    ]);
+  }
+
+  function showError(title, details) {
+    errorOverlay.hidden = false;
+    errorMessage.textContent = title;
+    errorDetails.textContent = details || '';
+    statusText.textContent = title;
+  }
+
+  function hideError() {
+    errorOverlay.hidden = true;
+    errorMessage.textContent = '';
+    errorDetails.textContent = '';
+  }
+
+  function setEmpty(container, text) {
+    container.replaceChildren();
+    const empty = document.createElement('div');
+    empty.className = 'diff-empty-state';
+    empty.textContent = text;
+    container.appendChild(empty);
+  }
+
+  async function renderKiCanvas(container, base64, fileName, fileType, label) {
+    if (!base64) {
+      setEmpty(container, `${label} has no file content for this revision.`);
+      return undefined;
+    }
+
+    const sourceText = decodeBase64Utf8(base64).trimStart();
+    if (!sourceText) {
+      setEmpty(container, `${label} is empty in this revision.`);
+      return undefined;
+    }
+
+    await waitForKiCanvas();
+
+    const viewer = document.createElement('kicanvas-embed');
+    viewer.setAttribute('controls', 'basic');
+    viewer.setAttribute('controlslist', 'zoom pan select');
+    viewer.setAttribute('theme', 'kicad');
+
+    const source = document.createElement('kicanvas-source');
+    source.setAttribute('name', fileName);
+    source.setAttribute('type', fileType === 'board' ? 'board' : 'schematic');
+    source.textContent = sourceText;
+    viewer.appendChild(source);
+
+    container.replaceChildren(viewer);
+    return viewer;
+  }
+
+  function waitForViewer(viewer, label) {
+    if (!viewer) {
+      return Promise.resolve();
+    }
+
+    return new Promise((resolve) => {
+      const timeout = window.setTimeout(() => {
+        window.clearInterval(poll);
+        statusText.textContent = `${label} is still rendering. Use Developer Tools if it remains blank.`;
+        resolve();
+      }, 15000);
+
+      const poll = window.setInterval(() => {
+        if (viewer.loaded === true || viewer.getAttribute('loaded') !== null) {
+          window.clearTimeout(timeout);
+          window.clearInterval(poll);
+          viewer.fitToScreen?.();
+          resolve();
+        }
+      }, 150);
+    });
+  }
+
+  function renderDiffList(components) {
+    diffList.innerHTML = (components || [])
+      .map((component) => {
+        const reference = escapeHtml(component.reference || component.uuid || '?');
+        const type = escapeHtml(component.type || 'changed');
+        return `<button class="layer-item" data-reference="${reference}"><span class="badge">${type}</span><strong>${reference}</strong></button>`;
+      })
+      .join('');
+
+    for (const button of diffList.querySelectorAll('button')) {
+      button.addEventListener('click', () => {
+        vscode.postMessage({
+          type: 'navigate',
+          payload: { reference: button.dataset.reference }
+        });
+      });
+    }
+  }
+
+  async function setDiff(payload) {
+    hideError();
+    viewerGrid.classList.remove('left-empty', 'right-empty');
+    statusText.textContent = 'Rendering diff…';
+    renderDiffList(payload.components || []);
+    setEmpty(leftContainer, 'Rendering HEAD…');
+    setEmpty(rightContainer, 'Rendering Working Tree…');
+
+    try {
+      const fileType = payload.fileType || (String(payload.fileName || '').endsWith('.kicad_pcb') ? 'board' : 'schematic');
+      const beforeIsEmpty = !payload.beforeBase64 || !decodeBase64Utf8(payload.beforeBase64).trimStart();
+      const afterIsEmpty = !payload.afterBase64 || !decodeBase64Utf8(payload.afterBase64).trimStart();
+      viewerGrid.classList.toggle('left-empty', beforeIsEmpty && !afterIsEmpty);
+      viewerGrid.classList.toggle('right-empty', afterIsEmpty && !beforeIsEmpty);
+      leftViewer = await renderKiCanvas(
+        leftContainer,
+        payload.beforeBase64,
+        `HEAD:${payload.fileName || 'diff.kicad'}`,
+        fileType,
+        'HEAD'
+      );
+      rightViewer = await renderKiCanvas(
+        rightContainer,
+        payload.afterBase64,
+        `Working Tree:${payload.fileName || 'diff.kicad'}`,
+        fileType,
+        'Working Tree'
+      );
+      await Promise.all([
+        waitForViewer(leftViewer, 'HEAD'),
+        waitForViewer(rightViewer, 'Working Tree')
+      ]);
+      statusText.textContent = payload.summary || 'Diff rendered.';
+    } catch (error) {
+      showError(
+        'Could not render KiCad diff.',
+        error instanceof Error ? error.message : String(error)
+      );
+    }
+  }
+
+  function escapeHtml(value) {
+    return String(value)
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;');
   }
 
   window.addEventListener('message', (event) => {
     const message = event.data;
-    if (message.type === 'setDiff') {
-      setBlob(left, message.payload.beforeBase64, { get current() { return leftBlobUrl; }, set current(v) { leftBlobUrl = v; } });
-      setBlob(right, message.payload.afterBase64, { get current() { return rightBlobUrl; }, set current(v) { rightBlobUrl = v; } });
-      statusText.textContent = message.payload.summary;
-      diffList.innerHTML = (message.payload.components || [])
-        .map((component) => `<button class="layer-item" data-reference="${component.reference}"><span class="badge">${component.type}</span><strong>${component.reference}</strong></button>`)
-        .join('');
-      for (const button of diffList.querySelectorAll('button')) {
-        button.addEventListener('click', () => {
-          vscode.postMessage({
-            type: 'navigate',
-            payload: { reference: button.dataset.reference }
-          });
-        });
-      }
+    if (message.type === 'loading') {
+      hideError();
+      statusText.textContent = 'Loading diff…';
+      diffList.innerHTML = '';
+      setEmpty(leftContainer, 'Waiting for HEAD version…');
+      setEmpty(rightContainer, 'Waiting for working tree version…');
     }
+    if (message.type === 'setDiff') {
+      void setDiff(message.payload || {});
+    }
+    if (message.type === 'error') {
+      showError('Could not load diff.', message.payload?.message || '');
+    }
+  });
+
+  window.addEventListener('error', (event) => {
+    showError('Diff viewer script error.', event.message);
+  });
+
+  window.addEventListener('unhandledrejection', (event) => {
+    const reason = event.reason instanceof Error ? event.reason.message : String(event.reason || 'Unknown error');
+    showError('Diff viewer runtime error.', reason);
   });
 })();

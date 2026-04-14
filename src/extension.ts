@@ -4,7 +4,10 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { ErrorAnalyzer } from './ai/errorAnalyzer';
 import { AIProviderRegistry } from './ai/aiProvider';
+import { KiCadChatPanel } from './ai/chatPanel';
+import { formatDiagnosticSummary, getActiveAiContext } from './ai/context';
 import { CircuitExplainer } from './ai/circuitExplainer';
+import { buildProactiveDRCPrompt } from './ai/prompts';
 import { BomExporter } from './bom/bomExporter';
 import { BomParser } from './bom/bomParser';
 import { KiCadCheckService } from './cli/checkCommands';
@@ -13,6 +16,7 @@ import { KiCadCliRunner } from './cli/kicadCliRunner';
 import { ExportPresetStore } from './cli/exportPresets';
 import { KiCadExportService } from './cli/exportCommands';
 import { ComponentSearchService } from './components/componentSearch';
+import { ComponentSearchCache } from './components/componentSearchCache';
 import { LcscClient } from './components/lcscClient';
 import { OctopartClient } from './components/octopartClient';
 import {
@@ -31,6 +35,8 @@ import {
   OCTOPART_SECRET_KEY
 } from './constants';
 import { GitDiffDetector } from './git/gitDiffDetector';
+import { KiCadLibraryIndexer } from './library/libraryIndexer';
+import { LibrarySearchProvider } from './library/librarySearchProvider';
 import { KiCadCompletionProvider } from './language/completionProvider';
 import { KiCadDiagnosticsProvider } from './language/diagnosticsProvider';
 import { KiCadHoverProvider } from './language/hoverProvider';
@@ -46,6 +52,7 @@ import { SchematicEditorProvider } from './providers/schematicEditorProvider';
 import { KiCadStatusBar } from './statusbar/kicadStatusBar';
 import { KiCadTaskProvider } from './tasks/kicadTaskProvider';
 import { Logger } from './utils/logger';
+import type { DiagnosticSummary } from './types';
 
 let extensionLogger: Logger | undefined;
 
@@ -54,6 +61,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   extensionLogger = logger;
   logger.info('Activating KiCad Studio...');
   await migrateDeprecatedSecretSettings(context, logger);
+  let latestDrcRun:
+    | {
+        file: string;
+        diagnostics: vscode.Diagnostic[];
+        summary: DiagnosticSummary;
+      }
+    | undefined;
+  let aiHealthy: boolean | undefined;
 
   const parser = new SExpressionParser();
   const languageServer = new KiCadDocumentStore(parser);
@@ -62,7 +77,7 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const statusBar = new KiCadStatusBar(context);
   const bomParser = new BomParser(parser);
   const bomExporter = new BomExporter();
-  const presetStore = new ExportPresetStore();
+  const presetStore = new ExportPresetStore(context);
   const exportService = new KiCadExportService(
     cliRunner,
     cliDetector,
@@ -88,13 +103,23 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
   const circuitExplainer = new CircuitExplainer(aiProviders, logger);
   const componentSearch = new ComponentSearchService(
     new OctopartClient(context.secrets),
-    new LcscClient()
+    new LcscClient(),
+    new ComponentSearchCache(context.globalState)
+  );
+  const libraryIndexer = new KiCadLibraryIndexer(context);
+  const librarySearch = new LibrarySearchProvider(
+    libraryIndexer,
+    logger,
+    cliDetector,
+    cliRunner,
+    context.extensionUri
   );
 
   context.subscriptions.push(
     logger,
     statusBar,
     diagnosticsCollection,
+    libraryIndexer,
     schematicEditorProvider,
     pcbEditorProvider,
     bomViewProvider,
@@ -136,15 +161,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         return;
       }
       languageServer.invalidate(document.uri);
-      languageServer.parseDocument(document);
+      void languageServer.parseDocument(document);
       diagnosticsProvider.update(document);
+    }),
+    vscode.workspace.onDidChangeTextDocument((event) => {
+      if (!event.document.languageId.startsWith('kicad-')) {
+        return;
+      }
+      languageServer.scheduleParse(event.document);
     }),
     vscode.workspace.onDidSaveTextDocument((document) => {
       if (!document.languageId.startsWith('kicad-')) {
         return;
       }
       languageServer.invalidate(document.uri);
-      languageServer.parseDocument(document);
+      void languageServer.parseDocument(document);
       diagnosticsProvider.update(document);
       treeProvider.refresh();
       void refreshContexts();
@@ -168,8 +199,28 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         event.affectsConfiguration(SETTINGS.aiOpenAIApiMode)
       ) {
         cliDetector.clearCache();
+        aiHealthy = undefined;
         void refreshContexts();
       }
+      if (event.affectsConfiguration(SETTINGS.logLevel)) {
+        logger.refreshLevel();
+      }
+      if (event.affectsConfiguration(SETTINGS.viewerTheme)) {
+        const theme = vscode.workspace.getConfiguration().get<string>(SETTINGS.viewerTheme, 'kicad');
+        schematicEditorProvider.setTheme(theme);
+        pcbEditorProvider.setTheme(theme);
+      }
+    })
+  );
+
+  context.subscriptions.push(
+    vscode.window.onDidChangeActiveColorTheme((theme) => {
+      const isDark =
+        theme.kind === vscode.ColorThemeKind.Dark ||
+        theme.kind === vscode.ColorThemeKind.HighContrast;
+      const nextTheme = isDark ? 'dark' : 'light';
+      schematicEditorProvider.setTheme(nextTheme);
+      pcbEditorProvider.setTheme(nextTheme);
     })
   );
 
@@ -181,11 +232,21 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
     diagnosticsCollection,
     statusBar,
     componentSearch,
+    aiProviders,
     errorAnalyzer,
     circuitExplainer,
+    libraryIndexer,
+    librarySearch,
     treeProvider,
     context,
-    logger
+    logger,
+    getLatestDrcRun: () => latestDrcRun,
+    setLatestDrcRun: (value) => {
+      latestDrcRun = value;
+    },
+    setAiHealthy: (value) => {
+      aiHealthy = value;
+    }
   });
 
   void cliDetector.detect().then((cli) => {
@@ -228,6 +289,15 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
       CONTEXT_KEYS.aiEnabled,
       Boolean(provider?.isConfigured())
     );
+    await vscode.commands.executeCommand(
+      'setContext',
+      CONTEXT_KEYS.aiHealthy,
+      Boolean(provider?.isConfigured() && aiHealthy !== false)
+    );
+    statusBar.update({
+      aiConfigured: Boolean(provider?.isConfigured()),
+      aiHealthy
+    });
   }
 
   async function runConfiguredSaveChecks(document: vscode.TextDocument): Promise<void> {
@@ -249,6 +319,14 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
         : await checkService.runERC(document.fileName);
       diagnosticsCollection.set(vscode.Uri.file(document.fileName), result.diagnostics);
       statusBar.update(shouldRunDrc ? { drc: result.summary } : { erc: result.summary });
+      if (shouldRunDrc) {
+        latestDrcRun = {
+          file: document.fileName,
+          diagnostics: result.diagnostics,
+          summary: result.summary
+        };
+        await maybeOfferProactiveDrc(result.summary, result.diagnostics.length);
+      }
       if (result.diagnostics.length > 0) {
         await vscode.commands.executeCommand('workbench.actions.view.problems');
       }
@@ -259,6 +337,24 @@ export async function activate(context: vscode.ExtensionContext): Promise<void> 
           ? `KiCad Studio auto-check failed: ${error.message}`
           : 'KiCad Studio auto-check failed. Confirm kicad-cli is configured and the file is valid.'
       );
+    }
+  }
+
+  async function maybeOfferProactiveDrc(
+    summary: DiagnosticSummary,
+    diagnosticCount: number
+  ): Promise<void> {
+    const provider = await aiProviders.getProvider();
+    if (!provider?.isConfigured() || diagnosticCount <= 0) {
+      return;
+    }
+    const choice = await vscode.window.showInformationMessage(
+      `DRC: ${summary.errors} errors found. Start AI analysis?`,
+      'Yes, analyze',
+      'No'
+    );
+    if (choice === 'Yes, analyze') {
+      await vscode.commands.executeCommand(COMMANDS.aiProactiveDRC);
     }
   }
 }
@@ -344,11 +440,27 @@ function registerCommands(
     diagnosticsCollection: vscode.DiagnosticCollection;
     statusBar: KiCadStatusBar;
     componentSearch: ComponentSearchService;
+    aiProviders: AIProviderRegistry;
     errorAnalyzer: ErrorAnalyzer;
     circuitExplainer: CircuitExplainer;
+    libraryIndexer: KiCadLibraryIndexer;
+    librarySearch: LibrarySearchProvider;
     treeProvider: KiCadProjectTreeProvider;
     context: vscode.ExtensionContext;
     logger: Logger;
+    getLatestDrcRun: () =>
+      | {
+          file: string;
+          diagnostics: vscode.Diagnostic[];
+          summary: DiagnosticSummary;
+        }
+      | undefined;
+    setLatestDrcRun: (value: {
+      file: string;
+      diagnostics: vscode.Diagnostic[];
+      summary: DiagnosticSummary;
+    }) => void;
+    setAiHealthy: (value: boolean | undefined) => void;
   }
 ): void {
   const registrations: vscode.Disposable[] = [];
@@ -381,6 +493,8 @@ function registerCommands(
           { label: '$(archive) Export Manufacturing Package', command: COMMANDS.exportManufacturingPackage },
           { label: '$(file-pdf) Export PDF', command: COMMANDS.exportPDF },
           { label: '$(search) Search Component', command: COMMANDS.searchComponent },
+          { label: '$(comment-discussion) Open AI Chat', command: COMMANDS.openAiChat },
+          { label: '$(search) Search Library Symbol', command: COMMANDS.searchLibrarySymbol },
           { label: '$(git-compare) Show Visual Diff', command: COMMANDS.showDiff },
           {
             label: '$(settings-gear) Open KiCad Studio Settings',
@@ -502,8 +616,24 @@ function registerCommands(
         const result = await services.checkService.runDRC(file);
         services.diagnosticsCollection.set(vscode.Uri.file(file), result.diagnostics);
         services.statusBar.update({ drc: result.summary });
+        services.setLatestDrcRun({
+          file,
+          diagnostics: result.diagnostics,
+          summary: result.summary
+        });
         if (result.diagnostics.length > 0) {
           await vscode.commands.executeCommand('workbench.actions.view.problems');
+          const provider = await services.aiProviders.getProvider();
+          if (provider?.isConfigured()) {
+            const choice = await vscode.window.showInformationMessage(
+              `DRC: ${result.summary.errors} errors found. Start AI analysis?`,
+              'Yes, analyze',
+              'No'
+            );
+            if (choice === 'Yes, analyze') {
+              await vscode.commands.executeCommand(COMMANDS.aiProactiveDRC);
+            }
+          }
         }
       } catch (error) {
         void vscode.window.showErrorMessage(
@@ -542,12 +672,78 @@ function registerCommands(
     vscode.commands.registerCommand(COMMANDS.aiAnalyzeError, () =>
       services.errorAnalyzer.analyzeSelectedError()
     ),
+    vscode.commands.registerCommand(COMMANDS.aiProactiveDRC, async () => {
+      const latest = services.getLatestDrcRun();
+      const provider = await services.aiProviders.getProvider();
+      if (!provider?.isConfigured()) {
+        void vscode.window.showWarningMessage('AI provider is not configured. Choose a provider and store an API key first.');
+        return;
+      }
+      let drcRun = latest;
+      if (!drcRun) {
+        const file = await resolveTargetFile(undefined, '.kicad_pcb');
+        if (!file) {
+          return;
+        }
+        const result = await services.checkService.runDRC(file);
+        drcRun = {
+          file,
+          diagnostics: result.diagnostics,
+          summary: result.summary
+        };
+        services.setLatestDrcRun(drcRun);
+      }
+      const rankedDiagnostics = [...drcRun.diagnostics].sort((left, right) => right.severity - left.severity);
+      const prompt = buildProactiveDRCPrompt(
+        rankedDiagnostics.slice(0, 5).map((diagnostic) => `${diagnostic.code ?? 'rule'}: ${diagnostic.message}`),
+        [formatDiagnosticSummary(drcRun.summary), getActiveAiContext().description].filter(Boolean).join('\n')
+      );
+      const panel = KiCadChatPanel.createOrShow(extensionContext, services.aiProviders, services.logger);
+      await panel.submitPrompt('Analyze the latest DRC results and prioritize fixes.', prompt);
+    }),
     vscode.commands.registerCommand(COMMANDS.aiExplainCircuit, () =>
       services.circuitExplainer.explainSelection()
     ),
+    vscode.commands.registerCommand(COMMANDS.openAiChat, () => {
+      KiCadChatPanel.createOrShow(extensionContext, services.aiProviders, services.logger);
+    }),
+    vscode.commands.registerCommand(COMMANDS.testAiConnection, async () => {
+      const provider = await services.aiProviders.getProvider();
+      if (!provider?.isConfigured()) {
+        services.setAiHealthy(undefined);
+        services.statusBar.update({ aiConfigured: false, aiHealthy: undefined });
+        void vscode.window.showWarningMessage('AI provider is not configured. Choose a provider and store an API key first.');
+        return;
+      }
+      const result = await provider.testConnection();
+      services.setAiHealthy(result.ok);
+      services.statusBar.update({ aiConfigured: true, aiHealthy: result.ok });
+      if (result.ok) {
+        void vscode.window.showInformationMessage(
+          `${provider.name} connection OK (${result.latencyMs} ms).`
+        );
+      } else {
+        void vscode.window.showErrorMessage(
+          `${provider.name} connection failed after ${result.latencyMs} ms. ${result.error ?? ''}`.trim()
+        );
+      }
+    }),
     vscode.commands.registerCommand(COMMANDS.refreshProjectTree, () =>
       services.treeProvider.refresh()
     ),
+    vscode.commands.registerCommand(COMMANDS.searchLibrarySymbol, () =>
+      services.librarySearch.searchSymbols()
+    ),
+    vscode.commands.registerCommand(COMMANDS.searchLibraryFootprint, () =>
+      services.librarySearch.searchFootprints()
+    ),
+    vscode.commands.registerCommand(COMMANDS.reindexLibraries, async () => {
+      await vscode.window.withProgress(
+        { location: vscode.ProgressLocation.Notification, title: 'KiCad libraries are being reindexed...' },
+        (progress) => services.libraryIndexer.indexAll(progress)
+      );
+      void vscode.window.showInformationMessage('Library index updated.');
+    }),
     vscode.commands.registerCommand(COMMANDS.saveExportPreset, () =>
       services.exportService.savePreset()
     ),

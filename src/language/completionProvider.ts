@@ -17,7 +17,10 @@ export class KiCadCompletionProvider implements vscode.CompletionItemProvider {
       const item = new vscode.CompletionItem(tag, vscode.CompletionItemKind.Keyword);
       item.detail = 'KiCad S-expression node';
       item.insertText = isAfterOpenParen ? tag : `(${tag})`;
-      item.range = document.getWordRangeAtPosition(position, /[A-Za-z0-9_.:-]*/);
+      const range = document.getWordRangeAtPosition(position, /[A-Za-z0-9_.:-]*/);
+      if (range) {
+        item.range = range;
+      }
       return item;
     });
   }

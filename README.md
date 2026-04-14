@@ -1,6 +1,12 @@
 # KiCad Studio
 
+[![CI](https://github.com/oaslananka/kicad-studio/actions/workflows/ci.yml/badge.svg)](https://github.com/oaslananka/kicad-studio/actions/workflows/ci.yml)
+[![VS Marketplace](https://img.shields.io/visual-studio-marketplace/v/oaslananka.kicadstudio)](https://marketplace.visualstudio.com/items?itemName=oaslananka.kicadstudio)
+[![Installs](https://img.shields.io/visual-studio-marketplace/i/oaslananka.kicadstudio)](https://marketplace.visualstudio.com/items?itemName=oaslananka.kicadstudio)
+
 The complete KiCad development environment for VS Code: open schematics and PCBs, run DRC/ERC, export production files, inspect BOMs, search components, compare design revisions, and optionally get AI-powered design guidance.
+
+![Demo Placeholder](assets/screenshots/ai-assistant.png)
 
 Public GitHub repository:
 `https://github.com/oaslananka/kicad-studio`
@@ -16,8 +22,9 @@ Primary repository and CI/CD live in Azure DevOps:
 - `🩺` DRC/ERC diagnostics mapped into the VS Code Problems panel.
 - `📦` Bill of Materials side view with filtering, sorting, and export.
 - `🔎` Component lookup through Octopart/Nexar and LCSC.
+- `📚` Local KiCad symbol and footprint library search.
 - `🔀` Visual Git diff for KiCad schematics.
-- `🤖` Optional AI analysis for errors and selected circuit blocks.
+- `🤖` Optional AI analysis for errors and selected circuit blocks plus multi-turn AI chat.
 - `🌲` KiCad-aware project explorer, jobset awareness, and reusable VS Code tasks.
 
 ## Feature Matrix
@@ -30,7 +37,7 @@ Primary repository and CI/CD live in Azure DevOps:
 | 3D exports                    | GLB, BREP, PLY                                                                   |
 | Manufacturing package         | Generic, JLCPCB, and PCBWay ZIP profiles                                         |
 | BOM/netlist                   | BOM CSV/XLSX/HTML plus CLI-backed net/node extraction                            |
-| AI                            | Claude and OpenAI with secure SecretStorage keys and language-selectable prompts |
+| AI                            | Claude and OpenAI with secure SecretStorage keys, streaming chat, proactive DRC prompts |
 | Jobsets                       | `.kicad_jobset` discovery and `kicad-cli jobset run` command                     |
 
 ## Requirements
@@ -140,7 +147,15 @@ code --install-extension oaslananka.kicadstudio
 
 - `KiCad: AI Analyze Selected Error` asks the configured provider to explain a DRC/ERC issue.
 - `KiCad: AI Explain Selected Block` analyzes selected text from the active editor.
+- `KiCad: Open AI Chat` opens a multi-turn chat panel with streaming responses and cancel support.
+- `KiCad: AI Analyze Latest DRC Results` summarizes the latest DRC run directly inside the chat panel.
 - AI features are fully opt-in and remain disabled when no provider or secret key is configured.
+
+### Local Library Search
+
+- `KiCad: Search Symbol Library` indexes local `.kicad_sym` files and searches by name, description, and keywords.
+- `KiCad: Search Footprint Library` searches local `.kicad_mod` files and shows metadata plus SVG preview when `kicad-cli` supports it.
+- `KiCad: Reindex Libraries` refreshes the cached library index stored in VS Code global state.
 
 ## Configuration
 
@@ -161,7 +176,8 @@ code --install-extension oaslananka.kicadstudio
 | `kicadstudio.ai.provider`                | `none`                                                                            | AI provider: `none`, `claude`, or `openai`.                                                         |
 | `kicadstudio.ai.model`                   | `""`                                                                              | Optional model override. Leave empty to use `claude-sonnet-4-6` for Claude or `gpt-4.1` for OpenAI. |
 | `kicadstudio.ai.openaiApiMode`           | `responses`                                                                       | OpenAI API mode: `responses` or `chat-completions`.                                                 |
-| `kicadstudio.ai.language`                | `en`                                                                              | Language for AI-generated answers: `en`, `tr`, `de`, `zh-CN`, or `ja`.                              |
+| `kicadstudio.ai.language`                | `en`                                                                              | Language for AI-generated answers: `en`, `tr`, `de`, `zh-CN`, `ja`, `fr`, `es`, `ko`, or `pt-BR`.  |
+| `kicadstudio.logLevel`                   | `info`                                                                            | KiCad Studio log verbosity: `debug`, `info`, `warn`, or `error`.                                    |
 | `kicadstudio.drc.autoRunOnSave`          | `false`                                                                           | Automatically run DRC when a PCB file is saved.                                                     |
 | `kicadstudio.erc.autoRunOnSave`          | `false`                                                                           | Automatically run ERC when a schematic file is saved.                                               |
 | `kicadstudio.exportPresets`              | `[]`                                                                              | Stored export presets managed by the extension.                                                     |
@@ -181,6 +197,29 @@ Plaintext API key settings have been removed from runtime use. Use `KiCad: Set A
 | Run DRC        | `Ctrl+Shift+D`  | `Cmd+Shift+D` |
 | Run ERC        | `Ctrl+Shift+E`  | `Cmd+Shift+E` |
 | Export Gerbers | `Ctrl+Shift+G`  | `Cmd+Shift+G` |
+| Search Symbols | `Ctrl+Shift+K Ctrl+Shift+S` | `Cmd+Shift+K Cmd+Shift+S` |
+| Search Footprints | `Ctrl+Shift+K Ctrl+Shift+F` | `Cmd+Shift+K Cmd+Shift+F` |
+
+## Troubleshooting
+
+### `kicad-cli` not found
+
+Run `KiCad: Detect kicad-cli`. If it still fails:
+1. Open Settings and search for `kicadstudio.kicadCliPath`.
+2. Set the full path to the `kicad-cli` binary.
+
+### AI returns no response
+
+1. Run `KiCad: Set AI API Key`.
+2. Check **Output → KiCad Studio** for provider errors.
+3. Try `KiCad: Test AI Connection` to verify credentials and latency.
+4. Try a smaller selection when using `AI Explain Selected Block`.
+
+### Viewer shows blank
+
+1. Ensure the file is saved.
+2. Keep `kicadstudio.viewer.autoRefresh` enabled or press `R` in the viewer.
+3. Check that your file format is supported by the bundled KiCanvas build.
 
 ## KiCad CLI Setup
 

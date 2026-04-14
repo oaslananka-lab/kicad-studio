@@ -2,7 +2,7 @@
   "name": "kicadstudio",
   "displayName": "KiCad Studio",
   "description": "The complete KiCad development environment for VS Code — view schematics & PCBs, run DRC/ERC, export production files, search components, and get AI-powered design assistance.",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "publisher": "oaslananka",
   "engines": {
     "vscode": "^1.95.0",
@@ -375,9 +375,44 @@
         "category": "KiCad AI"
       },
       {
+        "command": "kicadstudio.aiProactiveDRC",
+        "title": "KiCad: AI Analyze Latest DRC Results",
+        "category": "KiCad AI"
+      },
+      {
         "command": "kicadstudio.aiExplainCircuit",
         "title": "KiCad: AI Explain Selected Block",
         "category": "KiCad AI"
+      },
+      {
+        "command": "kicadstudio.openAiChat",
+        "title": "KiCad: Open AI Chat",
+        "category": "KiCad AI",
+        "icon": "$(comment-discussion)"
+      },
+      {
+        "command": "kicadstudio.testAiConnection",
+        "title": "KiCad: Test AI Connection",
+        "category": "KiCad AI",
+        "icon": "$(pulse)"
+      },
+      {
+        "command": "kicadstudio.searchLibrarySymbol",
+        "title": "KiCad: Search Symbol Library",
+        "category": "KiCad Library",
+        "icon": "$(search)"
+      },
+      {
+        "command": "kicadstudio.searchLibraryFootprint",
+        "title": "KiCad: Search Footprint Library",
+        "category": "KiCad Library",
+        "icon": "$(circuit-board)"
+      },
+      {
+        "command": "kicadstudio.reindexLibraries",
+        "title": "KiCad: Reindex Libraries",
+        "category": "KiCad Library",
+        "icon": "$(refresh)"
       },
       {
         "command": "kicadstudio.refreshProjectTree",
@@ -518,8 +553,29 @@
           "when": "kicadstudio.aiEnabled"
         },
         {
+          "command": "kicadstudio.aiProactiveDRC",
+          "when": "kicadstudio.aiEnabled && kicadstudio.pcbOpen"
+        },
+        {
           "command": "kicadstudio.aiExplainCircuit",
           "when": "kicadstudio.aiEnabled"
+        },
+        {
+          "command": "kicadstudio.openAiChat",
+          "when": "kicadstudio.aiEnabled"
+        },
+        {
+          "command": "kicadstudio.testAiConnection",
+          "when": "kicadstudio.aiEnabled"
+        },
+        {
+          "command": "kicadstudio.searchLibrarySymbol"
+        },
+        {
+          "command": "kicadstudio.searchLibraryFootprint"
+        },
+        {
+          "command": "kicadstudio.reindexLibraries"
         },
         {
           "command": "kicadstudio.showStatusMenu"
@@ -544,6 +600,16 @@
         "key": "ctrl+shift+g",
         "mac": "cmd+shift+g",
         "when": "kicadstudio.pcbOpen"
+      },
+      {
+        "command": "kicadstudio.searchLibrarySymbol",
+        "key": "ctrl+shift+k ctrl+shift+s",
+        "mac": "cmd+shift+k cmd+shift+s"
+      },
+      {
+        "command": "kicadstudio.searchLibraryFootprint",
+        "key": "ctrl+shift+k ctrl+shift+f",
+        "mac": "cmd+shift+k cmd+shift+f"
       }
     ],
     "configuration": {
@@ -666,9 +732,24 @@
             "tr",
             "de",
             "zh-CN",
-            "ja"
+            "ja",
+            "fr",
+            "es",
+            "ko",
+            "pt-BR"
           ],
           "description": "Language for AI-generated answers. Extension UI language follows VS Code locale packs."
+        },
+        "kicadstudio.logLevel": {
+          "type": "string",
+          "enum": [
+            "debug",
+            "info",
+            "warn",
+            "error"
+          ],
+          "default": "info",
+          "description": "KiCad Studio log verbosity"
         },
         "kicadstudio.drc.autoRunOnSave": {
           "type": "boolean",
@@ -770,8 +851,8 @@
     "prepare:media": "node scripts/bundle-kicanvas.js",
     "generate:assets": "node scripts/generate-icon.js",
     "vscode:prepublish": "npm run build:prod",
-    "build": "npm run prepare:media && webpack --mode development",
-    "build:prod": "npm run prepare:media && webpack --mode production",
+    "build": "npm run prepare:media && webpack --mode production",
+    "build:prod": "npm run build",
     "watch": "webpack --mode development --watch",
     "lint": "eslint src test scripts --ext .ts,.js",
     "compile-tests": "tsc -p tsconfig.test.json",

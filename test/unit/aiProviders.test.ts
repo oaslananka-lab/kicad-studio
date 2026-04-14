@@ -28,8 +28,8 @@ describe('AI providers', () => {
     const body = JSON.parse(String(init.body)) as {
       input: Array<{ role: string; content: Array<{ type: string; text: string }> }>;
     };
-    expect(body.input[0].content[0]).toEqual({ type: 'input_text', text: 'system' });
-    expect(body.input[1].content[0].text).toContain('(kicad_sch)');
+    expect(body.input.at(0)?.content.at(0)).toEqual({ type: 'input_text', text: 'system' });
+    expect(body.input.at(1)?.content.at(0)?.text).toContain('(kicad_sch)');
   });
 
   it('supports OpenAI Chat Completions compatibility mode', async () => {
@@ -71,6 +71,6 @@ describe('AI providers', () => {
       messages: Array<{ content: string }>;
     };
     expect(body.system).toBe('system');
-    expect(body.messages[0].content).toContain('context');
+    expect(body.messages.at(0)?.content).toContain('context');
   });
 });

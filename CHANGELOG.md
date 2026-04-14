@@ -1,5 +1,29 @@
 # Changelog
 
+## [Unreleased]
+
+### Added
+
+- AI streaming responses with real-time token display.
+- Multi-turn AI chat panel (`kicadstudio.openAiChat`).
+- Local KiCad symbol and footprint library search.
+- `ComponentSearchCache` for 24-hour Octopart/LCSC caching.
+- CONTRIBUTING, security, code of conduct, and GitHub issue/PR templates.
+- JSDoc and architecture documentation updates for the 2.0.0 refactor surface.
+
+### Changed
+
+- AI max tokens increased from 1200 to 4096.
+- CI now runs on push and pull request events with coverage artifact upload.
+- TypeScript now uses `noUncheckedIndexedAccess`, `exactOptionalPropertyTypes`, and `noImplicitOverride`.
+- Status bar now reflects AI configuration/health in addition to CLI and DRC/ERC state.
+
+### Fixed
+
+- KiCad document parsing now coalesces duplicate parse requests.
+- `kicad-cli` runner now de-duplicates identical in-flight commands.
+- Viewer payloads now cache base64 content by file mtime and refresh more predictably.
+
 ## [1.0.2] - 2026-04-13
 
 ### Changed

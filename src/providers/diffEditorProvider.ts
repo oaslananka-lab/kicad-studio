@@ -107,7 +107,8 @@ export class DiffEditorProvider {
           afterBase64:  bufferToBase64(Buffer.from(versions.afterText,  'utf8')),
           components,
           summary: `Showing diff: HEAD vs Working Tree — ${added} added, ${removed} removed, ${changed} changed`,
-          fileName: path.basename(filePath)
+          fileName: path.basename(filePath),
+          fileType: filePath.endsWith('.kicad_pcb') ? 'board' : 'schematic'
         }
       });
     } catch (err) {

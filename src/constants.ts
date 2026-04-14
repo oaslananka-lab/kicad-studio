@@ -13,6 +13,10 @@ export const PARTIAL_PARSE_LINE_LIMIT = 2000;
 export const WEBVIEW_MESSAGE_DEBOUNCE_MS = 500;
 export const SEARCH_DEBOUNCE_MS = 300;
 export const CLI_TIMEOUT_MS = 5 * 60 * 1000;
+export const AI_MAX_TOKENS = 4096;
+export const AI_STREAM_TIMEOUT_MS = 120_000;
+export const AI_CHAT_MAX_HISTORY = 20;
+export const VIEWER_HIDDEN_CACHE_RELEASE_MS = 5 * 60 * 1000;
 export const EXPORT_PRESET_SETTING = 'kicadstudio.exportPresets';
 export const OCTOPART_SECRET_KEY = 'kicadstudio.secrets.octopart';
 export const AI_SECRET_KEY = 'kicadstudio.secrets.ai';
@@ -65,6 +69,12 @@ export const COMMANDS = {
   showDiff: 'kicadstudio.showDiff',
   aiAnalyzeError: 'kicadstudio.aiAnalyzeError',
   aiExplainCircuit: 'kicadstudio.aiExplainCircuit',
+  openAiChat: 'kicadstudio.openAiChat',
+  aiProactiveDRC: 'kicadstudio.aiProactiveDRC',
+  testAiConnection: 'kicadstudio.testAiConnection',
+  searchLibrarySymbol: 'kicadstudio.searchLibrarySymbol',
+  searchLibraryFootprint: 'kicadstudio.searchLibraryFootprint',
+  reindexLibraries: 'kicadstudio.reindexLibraries',
   refreshProjectTree: 'kicadstudio.refreshProjectTree',
   saveExportPreset: 'kicadstudio.saveExportPreset',
   runExportPreset: 'kicadstudio.runExportPreset',
@@ -76,7 +86,8 @@ export const CONTEXT_KEYS = {
   hasProject: 'kicadstudio.hasProject',
   schematicOpen: 'kicadstudio.schematicOpen',
   pcbOpen: 'kicadstudio.pcbOpen',
-  aiEnabled: 'kicadstudio.aiEnabled'
+  aiEnabled: 'kicadstudio.aiEnabled',
+  aiHealthy: 'kicadstudio.aiHealthy'
 } as const;
 export const SETTINGS = {
   cliPath: 'kicadstudio.kicadCliPath',
@@ -97,6 +108,7 @@ export const SETTINGS = {
   aiModel: 'kicadstudio.ai.model',
   aiLanguage: 'kicadstudio.ai.language',
   aiOpenAIApiMode: 'kicadstudio.ai.openaiApiMode',
+  logLevel: 'kicadstudio.logLevel',
   autoRunDRC: 'kicadstudio.drc.autoRunOnSave',
   autoRunERC: 'kicadstudio.erc.autoRunOnSave'
 } as const;

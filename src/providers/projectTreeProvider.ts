@@ -11,7 +11,9 @@ class KiCadTreeItem extends vscode.TreeItem {
   ) {
     super(node.label, collapsibleState);
     this.contextValue = node.type;
-    this.resourceUri = node.uri;
+    if (node.uri) {
+      this.resourceUri = node.uri;
+    }
 
     if (node.uri && (node.type === 'schematic' || node.type === 'pcb' || node.type === 'file' || node.type === 'jobset')) {
       this.command = {

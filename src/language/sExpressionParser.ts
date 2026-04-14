@@ -4,8 +4,8 @@ import type { ParserError } from '../types';
 
 export interface SNode {
   type: 'atom' | 'string' | 'number' | 'list';
-  value?: string | number;
-  children?: SNode[];
+  value?: string | number | undefined;
+  children?: SNode[] | undefined;
   position: { line: number; col: number; end: number };
 }
 
@@ -77,6 +77,9 @@ export class SExpressionParser {
       return undefined;
     }
     const valueNode = child.children[1];
+    if (!valueNode) {
+      return undefined;
+    }
     if (valueNode.type === 'string' || valueNode.type === 'atom' || valueNode.type === 'number') {
       return String(valueNode.value ?? '');
     }
@@ -360,6 +363,9 @@ export class SExpressionParser {
       return undefined;
     }
     const first = node.children[0];
+    if (!first) {
+      return undefined;
+    }
     if (first.type === 'atom' || first.type === 'string') {
       return String(first.value ?? '');
     }
@@ -375,7 +381,7 @@ export class SExpressionParser {
   }
 
   private currentChar(context: ParseContext): string {
-    return context.text[context.cursor.index];
+    return context.text[context.cursor.index] ?? '';
   }
 
   private isEof(context: ParseContext): boolean {

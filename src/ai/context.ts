@@ -1,0 +1,123 @@
+import * as fs from 'node:fs';
+import * as path from 'node:path';
+import * as vscode from 'vscode';
+import type { DiagnosticSummary } from '../types';
+import type { KiCadContext } from './prompts';
+
+export interface ActiveAiContext {
+  fileName: string | undefined;
+  fileType?: 'schematic' | 'pcb' | 'other';
+  documentPreview: string;
+  projectContext: KiCadContext;
+  description: string;
+}
+
+export function getActiveAiContext(): ActiveAiContext {
+  const editor = vscode.window.activeTextEditor;
+  const fileName = editor?.document.fileName;
+  const documentPreview = editor?.document.getText().split(/\r?\n/).slice(0, 50).join('\n') ?? '';
+  const fileType = detectFileType(fileName);
+  const projectContext = resolveProjectContext(fileName);
+  const description = [
+    `Active file: ${fileName ? path.basename(fileName) : 'none'}`,
+    `Active file type: ${fileType}`,
+    projectContext.projectName ? `Project: ${projectContext.projectName}` : '',
+    projectContext.kicadVersion ? `KiCad version: ${projectContext.kicadVersion}` : '',
+    typeof projectContext.boardLayers === 'number'
+      ? `Board layers: ${projectContext.boardLayers}`
+      : ''
+  ]
+    .filter(Boolean)
+    .join('\n');
+
+  return {
+    fileName,
+    fileType,
+    documentPreview,
+    projectContext,
+    description
+  };
+}
+
+export function formatDiagnosticSummary(summary: DiagnosticSummary): string {
+  return `${summary.source.toUpperCase()} summary for ${path.basename(summary.file)}: ${summary.errors} errors, ${summary.warnings} warnings, ${summary.infos} infos.`;
+}
+
+function detectFileType(fileName: string | undefined): 'schematic' | 'pcb' | 'other' {
+  if (!fileName) {
+    return 'other';
+  }
+  if (fileName.endsWith('.kicad_sch')) {
+    return 'schematic';
+  }
+  if (fileName.endsWith('.kicad_pcb')) {
+    return 'pcb';
+  }
+  return 'other';
+}
+
+function resolveProjectContext(fileName: string | undefined): KiCadContext {
+  if (!fileName) {
+    return {};
+  }
+
+  const projectFile = findProjectFile(fileName);
+  const projectName = projectFile ? path.parse(projectFile).name : undefined;
+  const kicadVersion = readProjectVersion(projectFile);
+  const boardLayers = fileName.endsWith('.kicad_pcb') ? readBoardLayers(fileName) : undefined;
+
+  const result: KiCadContext = {};
+  if (projectName) {
+    result.projectName = projectName;
+  }
+  if (kicadVersion) {
+    result.kicadVersion = kicadVersion;
+  }
+  if (typeof boardLayers === 'number') {
+    result.boardLayers = boardLayers;
+  }
+  return result;
+}
+
+function findProjectFile(fileName: string): string | undefined {
+  const sibling = path.join(path.dirname(fileName), `${path.parse(fileName).name}.kicad_pro`);
+  if (fs.existsSync(sibling)) {
+    return sibling;
+  }
+
+  try {
+    const entries = fs.readdirSync(path.dirname(fileName));
+    const projectEntry = entries.find((entry) => entry.endsWith('.kicad_pro'));
+    return projectEntry ? path.join(path.dirname(fileName), projectEntry) : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
+function readProjectVersion(projectFile: string | undefined): string | undefined {
+  if (!projectFile || !fs.existsSync(projectFile)) {
+    return undefined;
+  }
+  try {
+    const raw = fs.readFileSync(projectFile, 'utf8');
+    const parsed = JSON.parse(raw) as { meta?: { filename?: string }; version?: string };
+    return typeof parsed.version === 'string' ? parsed.version : parsed.meta?.filename;
+  } catch {
+    const raw = fs.readFileSync(projectFile, 'utf8');
+    const match = raw.match(/"version"\s*:\s*"([^"]+)"/);
+    return match?.[1];
+  }
+}
+
+function readBoardLayers(boardFile: string): number | undefined {
+  if (!fs.existsSync(boardFile)) {
+    return undefined;
+  }
+  try {
+    const raw = fs.readFileSync(boardFile, 'utf8');
+    const matches = [...raw.matchAll(/\(\s*(\d+)\s+"[^"]+"\s+(?:signal|jumper|mixed|power)\s*\)/g)];
+    return matches.length || undefined;
+  } catch {
+    return undefined;
+  }
+}

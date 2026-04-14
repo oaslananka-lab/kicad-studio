@@ -5,6 +5,15 @@ import type { ComponentDiff } from '../types';
 import { SExpressionParser, type SNode } from '../language/sExpressionParser';
 import { getWorkspaceRoot, relativeToWorkspace } from '../utils/pathUtils';
 
+interface DiffComponentRecord {
+  [key: string]: string;
+  uuid: string;
+  reference: string;
+  value: string;
+  footprint: string;
+  libId: string;
+}
+
 export class GitDiffDetector {
   constructor(private readonly parser: SExpressionParser) {}
 
@@ -66,13 +75,13 @@ export class GitDiffDetector {
     return result.stdout;
   }
 
-  private extractComponents(text: string): Map<string, Record<string, string>> {
+  private extractComponents(text: string): Map<string, DiffComponentRecord> {
     const ast = this.parser.parse(text);
     const nodes = [
       ...this.parser.findAllNodes(ast, 'symbol'),
       ...this.parser.findAllNodes(ast, 'footprint')
     ];
-    const map = new Map<string, Record<string, string>>();
+    const map = new Map<string, DiffComponentRecord>();
 
     for (const node of nodes) {
       const component = this.toComponent(node);
@@ -85,7 +94,7 @@ export class GitDiffDetector {
     return map;
   }
 
-  private toComponent(node: SNode): Record<string, string> {
+  private toComponent(node: SNode): DiffComponentRecord {
     const reference = this.findProperty(node, 'Reference') ?? this.findProperty(node, 'reference') ?? '';
     const value = this.findProperty(node, 'Value') ?? this.findProperty(node, 'value') ?? '';
     const footprint = this.findProperty(node, 'Footprint') ?? this.findProperty(node, 'footprint') ?? '';
@@ -100,6 +109,9 @@ export class GitDiffDetector {
         continue;
       }
       const head = child.children[0];
+      if (!head) {
+        continue;
+      }
       if (String(head.value ?? '') === key && child.children[1]) {
         return String(child.children[1].value ?? '');
       }

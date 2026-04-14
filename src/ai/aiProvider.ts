@@ -13,23 +13,33 @@ export class AIProviderRegistry {
   constructor(private readonly context: vscode.ExtensionContext) {}
 
   async getProvider(): Promise<AIProvider | undefined> {
-    const config = vscode.workspace.getConfiguration();
-    const selected = config.get<string>(SETTINGS.aiProvider, 'none');
-    const apiKey = await this.context.secrets.get(AI_SECRET_KEY);
-    const configuredModel = config.get<string>(SETTINGS.aiModel, '').trim();
+    const selection = this.getSelection();
+    return this.getProviderForSelection(selection.provider, selection.model);
+  }
 
+  getSelection(): { provider: string; model: string; openAIApiMode: string } {
+    const config = vscode.workspace.getConfiguration();
+    return {
+      provider: config.get<string>(SETTINGS.aiProvider, 'none'),
+      model: config.get<string>(SETTINGS.aiModel, '').trim(),
+      openAIApiMode: config.get<string>(SETTINGS.aiOpenAIApiMode, DEFAULT_OPENAI_API_MODE)
+    };
+  }
+
+  async getProviderForSelection(selected: string, model = ''): Promise<AIProvider | undefined> {
+    const apiKey = await this.context.secrets.get(AI_SECRET_KEY);
     if (!apiKey || selected === 'none') {
       return undefined;
     }
 
     if (selected === 'claude') {
-      return new ClaudeProvider(apiKey, configuredModel || DEFAULT_CLAUDE_MODEL);
+      return new ClaudeProvider(apiKey, model || DEFAULT_CLAUDE_MODEL);
     }
     if (selected === 'openai') {
-      const apiMode = config.get<string>(SETTINGS.aiOpenAIApiMode, DEFAULT_OPENAI_API_MODE);
+      const apiMode = this.getSelection().openAIApiMode;
       return new OpenAIProvider(
         apiKey,
-        configuredModel || DEFAULT_OPENAI_MODEL,
+        model || DEFAULT_OPENAI_MODEL,
         apiMode === 'chat-completions' ? 'chat-completions' : 'responses'
       );
     }

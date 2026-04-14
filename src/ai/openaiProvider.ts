@@ -1,5 +1,13 @@
-import type { AIProvider } from '../types';
+import { AI_MAX_TOKENS, AI_STREAM_TIMEOUT_MS } from '../constants';
+import {
+  AIHttpError,
+  AIProviderNotConfiguredError,
+  AIRequestTimeoutError,
+  AIStreamAbortedError
+} from '../errors';
+import type { AIConnectionResult, AIProvider } from '../types';
 import { buildSystemPrompt, DEFAULT_AI_LANGUAGE } from './prompts';
+import { createManagedAbortSignal, readEventStream } from './providerUtils';
 
 export type OpenAIApiMode = 'responses' | 'chat-completions';
 
@@ -31,8 +39,15 @@ interface OpenAIErrorResponse {
   };
 }
 
-const REQUEST_TIMEOUT_MS = 30_000;
+interface OpenAIStreamEvent {
+  type?: string;
+  delta?: string;
+  text?: string;
+}
 
+/**
+ * OpenAI provider for KiCad analysis requests.
+ */
 export class OpenAIProvider implements AIProvider {
   readonly name = 'OpenAI';
 
@@ -46,26 +61,130 @@ export class OpenAIProvider implements AIProvider {
     return Boolean(this.apiKey);
   }
 
-  async analyze(prompt: string, context: string, systemPrompt = buildSystemPrompt(DEFAULT_AI_LANGUAGE)): Promise<string> {
+  async analyze(
+    prompt: string,
+    context: string,
+    systemPrompt = buildSystemPrompt(DEFAULT_AI_LANGUAGE)
+  ): Promise<string> {
     return this.mode === 'chat-completions'
       ? this.analyzeWithChatCompletions(prompt, context, systemPrompt)
       : this.analyzeWithResponses(prompt, context, systemPrompt);
   }
 
-  private async analyzeWithResponses(prompt: string, context: string, systemPrompt: string): Promise<string> {
-    const response = await this.request('https://api.openai.com/v1/responses', {
-      model: this.model,
-      input: [
-        {
-          role: 'system',
-          content: [{ type: 'input_text', text: systemPrompt }]
-        },
-        {
-          role: 'user',
-          content: [{ type: 'input_text', text: this.buildUserMessage(prompt, context) }]
+  async analyzeStream(
+    prompt: string,
+    context: string,
+    systemPrompt: string | undefined,
+    onChunk: (text: string) => void,
+    signal?: AbortSignal
+  ): Promise<void> {
+    if (this.mode === 'chat-completions') {
+      const response = await this.request('https://api.openai.com/v1/chat/completions', {
+        model: this.model,
+        stream: true,
+        messages: [
+          { role: 'system', content: systemPrompt ?? buildSystemPrompt(DEFAULT_AI_LANGUAGE) },
+          { role: 'user', content: this.buildUserMessage(prompt, context) }
+        ]
+      }, signal);
+      await readEventStream(response, async (_eventName, payload) => {
+        if (!payload || payload === '[DONE]') {
+          return;
         }
-      ]
+        try {
+          const parsed = JSON.parse(payload) as {
+            choices?: Array<{ delta?: { content?: string } }>;
+          };
+          const delta = parsed.choices?.[0]?.delta?.content;
+          if (delta) {
+            onChunk(delta);
+          }
+        } catch {
+          // Ignore malformed chunks.
+        }
+      });
+      return;
+    }
+
+    const response = await this.request(
+      'https://api.openai.com/v1/responses',
+      {
+        model: this.model,
+        max_output_tokens: AI_MAX_TOKENS,
+        stream: true,
+        input: [
+          {
+            role: 'system',
+            content: [{ type: 'input_text', text: systemPrompt ?? buildSystemPrompt(DEFAULT_AI_LANGUAGE) }]
+          },
+          {
+            role: 'user',
+            content: [{ type: 'input_text', text: this.buildUserMessage(prompt, context) }]
+          }
+        ]
+      },
+      signal
+    );
+
+    await readEventStream(response, async (_eventName, payload) => {
+      if (!payload || payload === '[DONE]') {
+        return;
+      }
+      let parsed: OpenAIStreamEvent;
+      try {
+        parsed = JSON.parse(payload) as OpenAIStreamEvent;
+      } catch {
+        return;
+      }
+      if (
+        parsed.type === 'response.output_text.delta' ||
+        parsed.type === 'text.delta' ||
+        parsed.type?.endsWith('.delta')
+      ) {
+        const delta = parsed.delta ?? parsed.text ?? '';
+        if (delta) {
+          onChunk(delta);
+        }
+      }
     });
+  }
+
+  async testConnection(): Promise<AIConnectionResult> {
+    const startedAt = Date.now();
+    try {
+      await this.analyze(
+        'Reply with the single word OK.',
+        'Connectivity test from KiCad Studio.',
+        buildSystemPrompt(DEFAULT_AI_LANGUAGE)
+      );
+      return { ok: true, latencyMs: Date.now() - startedAt };
+    } catch (error) {
+      return {
+        ok: false,
+        latencyMs: Date.now() - startedAt,
+        error: error instanceof Error ? error.message : String(error)
+      };
+    }
+  }
+
+  private async analyzeWithResponses(prompt: string, context: string, systemPrompt: string): Promise<string> {
+    const response = await this.request(
+      'https://api.openai.com/v1/responses',
+      {
+        model: this.model,
+        max_output_tokens: AI_MAX_TOKENS,
+        input: [
+          {
+            role: 'system',
+            content: [{ type: 'input_text', text: systemPrompt }]
+          },
+          {
+            role: 'user',
+            content: [{ type: 'input_text', text: this.buildUserMessage(prompt, context) }]
+          }
+        ]
+      }
+    );
 
     const json = (await response.json()) as OpenAIResponsesResponse;
     if (Array.isArray(json.output_text)) {
@@ -84,26 +203,32 @@ export class OpenAIProvider implements AIProvider {
   }
 
   private async analyzeWithChatCompletions(prompt: string, context: string, systemPrompt: string): Promise<string> {
-    const response = await this.request('https://api.openai.com/v1/chat/completions', {
-      model: this.model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: this.buildUserMessage(prompt, context) }
-      ]
-    });
+    const response = await this.request(
+      'https://api.openai.com/v1/chat/completions',
+      {
+        model: this.model,
+        max_tokens: AI_MAX_TOKENS,
+        messages: [
+          { role: 'system', content: systemPrompt },
+          { role: 'user', content: this.buildUserMessage(prompt, context) }
+        ]
+      }
+    );
 
     const json = (await response.json()) as OpenAIChatResponse;
     return json.choices?.[0]?.message?.content?.trim() || 'No response from OpenAI.';
   }
 
-  private async request(url: string, body: unknown): Promise<Response> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
+  private async request(url: string, body: unknown, signal?: AbortSignal): Promise<Response> {
+    if (!this.isConfigured()) {
+      throw new AIProviderNotConfiguredError();
+    }
 
+    const managedSignal = createManagedAbortSignal(this.name, AI_STREAM_TIMEOUT_MS, signal);
     try {
       const response = await fetch(url, {
         method: 'POST',
-        signal: controller.signal,
+        signal: managedSignal.signal,
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${this.apiKey}`
@@ -112,22 +237,31 @@ export class OpenAIProvider implements AIProvider {
       });
 
       if (!response.ok) {
-        throw new Error(await this.formatHttpError(response));
+        throw new AIHttpError(await this.formatHttpError(response));
       }
 
       return response;
     } catch (error) {
-      if (error instanceof DOMException && error.name === 'AbortError') {
-        throw new Error('OpenAI request timed out after 30 seconds. Check your connection and try again.', {
-          cause: error
-        });
+      if (managedSignal.wasTimeoutTriggered()) {
+        throw new AIRequestTimeoutError(this.name, AI_STREAM_TIMEOUT_MS);
       }
-      if (error instanceof Error) {
+      if (signal?.aborted) {
+        throw signal.reason instanceof Error ? signal.reason : new AIStreamAbortedError();
+      }
+      if (error instanceof AIHttpError) {
         throw error;
       }
-      throw new Error('OpenAI request failed due to an unknown network error.', { cause: error });
+      if (error instanceof AIRequestTimeoutError || error instanceof AIStreamAbortedError) {
+        throw error;
+      }
+      if (error instanceof DOMException && error.name === 'AbortError') {
+        throw new AIRequestTimeoutError(this.name, AI_STREAM_TIMEOUT_MS);
+      }
+      throw error instanceof Error
+        ? error
+        : new Error('OpenAI request failed due to an unknown network error.', { cause: error });
     } finally {
-      clearTimeout(timeout);
+      managedSignal.cleanup();
     }
   }
 
@@ -138,7 +272,7 @@ export class OpenAIProvider implements AIProvider {
       const parsed = JSON.parse(bodyText) as OpenAIErrorResponse;
       apiMessage = parsed.error?.message || parsed.error?.type || apiMessage;
     } catch {
-      // Keep the raw response body if it was not JSON.
+      // Preserve raw body text when it is not JSON.
     }
 
     const prefix =

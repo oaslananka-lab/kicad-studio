@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import { AIProviderRegistry } from './aiProvider';
+import { getActiveAiContext } from './context';
 import { Logger } from '../utils/logger';
 import { SETTINGS } from '../constants';
 import {
@@ -32,10 +33,18 @@ export class CircuitExplainer {
     const language = normalizeAiLanguage(
       vscode.workspace.getConfiguration().get<string>(SETTINGS.aiLanguage, DEFAULT_AI_LANGUAGE)
     );
+    const activeContext = getActiveAiContext();
     const response = await provider.analyze(
       buildCircuitExplanationPrompt(),
-      selectedText,
-      buildSystemPrompt(language)
+      [
+        activeContext.description,
+        'Selected content:',
+        selectedText,
+        activeContext.documentPreview ? `File preview:\n${activeContext.documentPreview}` : ''
+      ]
+        .filter(Boolean)
+        .join('\n\n'),
+      buildSystemPrompt(language, activeContext.projectContext)
     );
     this.logger.info(`Circuit explanation (${provider.name})\n${response}`);
     this.logger.show();

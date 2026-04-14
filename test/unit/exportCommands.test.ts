@@ -18,10 +18,26 @@ describe('buildCliExportCommands', () => {
 
   it('builds KiCad 9+ 3D and CAM export commands', () => {
     const pcb = 'C:\\project\\board.kicad_pcb';
-    expect(buildCliExportCommands('export-brep', pcb, 'fab')[0]).toContain('brep');
-    expect(buildCliExportCommands('export-ply', pcb, 'fab')[0]).toContain('ply');
-    expect(buildCliExportCommands('export-gencad', pcb, 'fab')[0]).toContain('gencad');
-    expect(buildCliExportCommands('export-ipcd356', pcb, 'fab')[0]).toContain('ipcd356');
+    expect(buildCliExportCommands('export-brep', pcb, 'fab', { versionMajor: 9 })[0]).toContain('brep');
+    expect(buildCliExportCommands('export-ply', pcb, 'fab', { versionMajor: 9 })[0]).toContain('ply');
+    expect(buildCliExportCommands('export-gencad', pcb, 'fab', { versionMajor: 9 })[0]).toContain('gencad');
+    expect(buildCliExportCommands('export-ipcd356', pcb, 'fab', { versionMajor: 9 })[0]).toContain('ipcd356');
+  });
+
+  it('builds gerber precision only for KiCad 9 and newer', () => {
+    const pcb = '/project/board.kicad_pcb';
+    expect(buildCliExportCommands('export-gerbers', pcb, '/project/fab', { versionMajor: 9 })[0]).toEqual(
+      expect.arrayContaining(['--precision', '6'])
+    );
+    expect(buildCliExportCommands('export-gerbers', pcb, '/project/fab', { versionMajor: 6 })[0]).not.toContain(
+      '--precision'
+    );
+  });
+
+  it('returns empty commands for BREP and PLY on KiCad 7 and older', () => {
+    const pcb = '/project/board.kicad_pcb';
+    expect(buildCliExportCommands('export-brep', pcb, '/project/fab', { versionMajor: 7 })).toEqual([]);
+    expect(buildCliExportCommands('export-ply', pcb, '/project/fab', { versionMajor: 7 })).toEqual([]);
   });
 
   it('builds pick-and-place export as CSV in millimeters', () => {
@@ -38,6 +54,11 @@ describe('buildCliExportCommands', () => {
     expect(buildCliExportCommands('export-sym-svg', '/project/lib.kicad_sym', '/project/fab')[0]).toEqual(
       ['sym', 'export', 'svg', '--output', '/project/fab', '--theme', 'kicad', '/project/lib.kicad_sym']
     );
+  });
+
+  it('reads IPC-2581 version and units from settings', () => {
+    const command = buildCliExportCommands('export-ipc2581', '/project/board.kicad_pcb', '/project/fab')[0];
+    expect(command).toEqual(expect.arrayContaining(['--version', 'C', '--units', 'mm']));
   });
 });
 
