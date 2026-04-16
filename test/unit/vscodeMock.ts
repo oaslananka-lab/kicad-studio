@@ -215,6 +215,12 @@ export const ViewColumn = {
   Beside: 2
 };
 
+export const TreeItemCollapsibleState = {
+  None: 0,
+  Collapsed: 1,
+  Expanded: 2
+};
+
 export const ColorThemeKind = {
   Dark: 2,
   HighContrast: 3
@@ -266,6 +272,30 @@ export class Uri {
   toString(): string {
     return this.fsPath;
   }
+}
+
+export class ThemeIcon {
+  constructor(public readonly id: string) {}
+}
+
+export class TreeItem {
+  description?: string;
+  tooltip?: string;
+  contextValue?: string;
+  iconPath?: unknown;
+  command?: unknown;
+
+  constructor(
+    public readonly label: string,
+    public readonly collapsibleState: number
+  ) {}
+}
+
+export class TabInputCustom {
+  constructor(
+    public readonly uri: Uri,
+    public readonly viewType: string
+  ) {}
 }
 
 export class Diagnostic {

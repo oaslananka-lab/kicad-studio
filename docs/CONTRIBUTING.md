@@ -7,6 +7,7 @@
 3. Press `F5` to launch the Extension Development Host.
 4. Run `npm run lint` and `npm run test:unit`.
 5. Run `npm test` before sending substantial changes when the integration host is available.
+6. Run `npm run test:e2e` for the desktop smoke suite when a Windows desktop session is available.
 
 ## Project Areas
 
@@ -18,7 +19,7 @@
 - `src/variants/`: KiCad 10 variant sidebar
 - `src/drc/`: graphical DRC rules sidebar
 - `test/unit/`: Jest-based unit coverage
-- `test/e2e/`: Playwright and VS Code host scaffolding
+- `test/e2e/`: Playwright-driven VS Code desktop smoke coverage
 
 ## Commit Style
 
@@ -43,6 +44,7 @@ Allowed prefixes:
 
 - `npm run lint` passes
 - `npm run test:unit` passes
+- `npm run test:e2e` passes for desktop-facing changes when the environment supports it
 - relevant docs are updated
 - screenshots or reproduction notes are included for UI changes
 - new commands/settings are reflected in `package.json`
