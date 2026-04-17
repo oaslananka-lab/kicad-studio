@@ -41,5 +41,5 @@
 
 ## New risks
 
-- Azure publish run `493` is waiting at the manual approval gate after producing the VSIX artifact.
-- Marketplace-side publish completion and a true post-publish smoke test against the published Marketplace artifact remain external release operations outside this local pass.
+- Azure publish approval was completed and the `v2.4.0` release was published from the prepared VSIX artifact.
+- No additional mandatory release tasks remain inside this repository; any further work is normal post-release maintenance or future roadmap work.
