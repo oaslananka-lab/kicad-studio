@@ -199,8 +199,22 @@ describe.each([
     }
 
     const originalAppData = process.env['APPDATA'];
+    const originalHome = process.env['HOME'];
+    const originalXdgConfigHome = process.env['XDG_CONFIG_HOME'];
     const fakeAppData = fs.mkdtempSync(path.join(os.tmpdir(), 'kicadstudio-appdata-'));
-    const kicadConfigDir = path.join(fakeAppData, 'kicad', '10.0');
+    let kicadConfigDir: string;
+
+    if (process.platform === 'win32') {
+      process.env['APPDATA'] = fakeAppData;
+      kicadConfigDir = path.join(fakeAppData, 'kicad', '10.0');
+    } else if (process.platform === 'darwin') {
+      process.env['HOME'] = fakeAppData;
+      kicadConfigDir = path.join(fakeAppData, 'Library', 'Preferences', 'kicad', '10.0');
+    } else {
+      process.env['XDG_CONFIG_HOME'] = fakeAppData;
+      kicadConfigDir = path.join(fakeAppData, 'kicad', '10.0');
+    }
+
     fs.mkdirSync(path.join(kicadConfigDir, 'colors'), { recursive: true });
     fs.writeFileSync(
       path.join(kicadConfigDir, 'pcbnew.json'),
@@ -220,7 +234,6 @@ describe.each([
       }),
       'utf8'
     );
-    process.env['APPDATA'] = fakeAppData;
 
     try {
       const provider = new ContextProvider({
@@ -236,6 +249,8 @@ describe.each([
       expect(panel.webview.html).toContain('rgb(1, 2, 3)');
     } finally {
       process.env['APPDATA'] = originalAppData;
+      process.env['HOME'] = originalHome;
+      process.env['XDG_CONFIG_HOME'] = originalXdgConfigHome;
       fs.rmSync(fakeAppData, { recursive: true, force: true });
     }
   });
