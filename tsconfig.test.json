@@ -1,0 +1,23 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "module": "commonjs",
+    "outDir": "out",
+    "sourceMap": true,
+    "rootDir": ".",
+    "types": [
+      "node",
+      "vscode",
+      "mocha"
+    ]
+  },
+  "include": [
+    "test/runTest.ts",
+    "test/suite/**/*.ts",
+    "test/integration/**/*.ts"
+  ],
+  "exclude": [
+    "dist",
+    "node_modules"
+  ]
+}

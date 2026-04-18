@@ -1,0 +1,101 @@
+trigger:
+  tags:
+    include:
+      - v*
+pr: none
+
+parameters:
+  - name: publishToOpenVsx
+    type: boolean
+    default: false
+
+variables:
+  - group: kicadstudio-secrets
+  - name: NodeVersion
+    value: "20.x"
+
+stages:
+  - stage: Package
+    displayName: Prepare Marketplace package
+    jobs:
+      - job: BuildAndPackage
+        displayName: Build production VSIX
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - task: UseNode@1
+            displayName: Use Node.js $(NodeVersion)
+            inputs:
+              version: $(NodeVersion)
+          - script: npm ci
+            displayName: Install dependencies
+          - script: npm run audit:ci
+            displayName: Audit dependencies
+          - script: npm run lint
+            displayName: Lint
+          - script: npx tsc -p tsconfig.json --noEmit
+            displayName: Type check
+          - script: npm run test:unit
+            displayName: Unit tests
+          - script: npm run build:prod
+            displayName: Production build
+          - script: npm run package
+            displayName: Package VSIX
+          - script: npm run check:bundle-size
+            displayName: Bundle size regression gate
+          - bash: |
+              mkdir -p "$(Build.ArtifactStagingDirectory)"
+              cp ./*.vsix "$(Build.ArtifactStagingDirectory)/"
+            displayName: Stage VSIX artifact
+          - publish: $(Build.ArtifactStagingDirectory)
+            displayName: Publish VSIX artifact
+            artifact: kicadstudio-vsix
+
+  - stage: AwaitApproval
+    displayName: Await owner approval
+    dependsOn: Package
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
+    jobs:
+      - job: ManualApproval
+        displayName: Manual approval gate
+        pool: server
+        timeoutInMinutes: 4320
+        steps:
+          - task: ManualValidation@0
+            timeoutInMinutes: 1440
+            inputs:
+              instructions: |
+                Review the packaged VSIX artifact and approve only when you want to publish KiCad Studio to the VS Code Marketplace.
+                This publish pipeline is intentionally manual and Azure DevOps is the source of truth for release approval.
+                GitHub Actions remain manual fallback workflows only and should not be treated as the release gate.
+              onTimeout: reject
+
+  - stage: Publish
+    displayName: Publish to VS Code Marketplace
+    dependsOn: AwaitApproval
+    condition: and(succeeded(), startsWith(variables['Build.SourceBranch'], 'refs/tags/v'))
+    jobs:
+      - job: PublishMarketplace
+        displayName: Publish approved release
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - task: UseNode@1
+            displayName: Use Node.js $(NodeVersion)
+            inputs:
+              version: $(NodeVersion)
+          - script: npm ci
+            displayName: Install dependencies
+          - script: npm run audit:ci
+            displayName: Audit dependencies
+          - script: npm run build:prod
+            displayName: Production build
+          - script: npm run publish
+            displayName: Publish extension
+            env:
+              VSCE_PAT: $(VSCE_PAT)
+          - ${{ if eq(parameters.publishToOpenVsx, true) }}:
+            - script: npx ovsx publish -p $(OVSX_PAT)
+              displayName: Publish to Open VSX

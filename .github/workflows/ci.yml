@@ -1,0 +1,35 @@
+name: Manual Fallback CI
+
+on:
+  workflow_dispatch:
+
+jobs:
+  lint-build-test:
+    name: Lint, Build, Test, Package
+    runs-on: ${{ matrix.os }}
+    strategy:
+      fail-fast: false
+      matrix:
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - name: Fallback notice
+        run: echo "Azure DevOps is the primary CI/CD system. This workflow is a manual fallback only."
+      - run: npm ci
+      - run: npm run lint
+      - run: npx tsc -p tsconfig.json --noEmit
+      - run: npm run test:unit -- --coverage
+      - run: npm run build
+      - run: npm run check:bundle-size
+      - name: Upload coverage report
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-${{ matrix.os }}
+          path: coverage/

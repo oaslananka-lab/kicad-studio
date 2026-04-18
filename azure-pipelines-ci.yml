@@ -1,0 +1,83 @@
+trigger:
+  branches:
+    include:
+      - main
+      - develop
+
+pr:
+  branches:
+    include:
+      - main
+
+variables:
+  NodeVersion: "20.x"
+
+stages:
+  - stage: Validate
+    displayName: Validate KiCad Studio
+    jobs:
+      - job: CrossPlatform
+        displayName: Lint, build, and test
+        strategy:
+          matrix:
+            linux:
+              imageName: ubuntu-latest
+            windows:
+              imageName: windows-latest
+            macos:
+              imageName: macos-latest
+        pool:
+          vmImage: $(imageName)
+        steps:
+          - checkout: self
+          - task: UseNode@1
+            displayName: Use Node.js $(NodeVersion)
+            inputs:
+              version: $(NodeVersion)
+          - script: npm ci
+            displayName: Install dependencies
+          - script: npm run audit:ci
+            displayName: Audit dependencies
+          - script: npm run lint
+            displayName: Lint
+          - script: npx tsc -p tsconfig.json --noEmit
+            displayName: Type check
+          - script: npm run test:unit
+            displayName: Unit tests
+          - script: npm run build
+            displayName: Build extension
+          - script: npm test
+            displayName: Integration tests
+          - publish: coverage
+            displayName: Publish coverage artifact
+            artifact: coverage-$(Agent.OS)
+            condition: succeededOrFailed()
+
+      - job: Package
+        displayName: Build VSIX artifact
+        dependsOn: CrossPlatform
+        pool:
+          vmImage: ubuntu-latest
+        steps:
+          - checkout: self
+          - task: UseNode@1
+            displayName: Use Node.js $(NodeVersion)
+            inputs:
+              version: $(NodeVersion)
+          - script: npm ci
+            displayName: Install dependencies
+          - script: npm run audit:ci
+            displayName: Audit dependencies
+          - script: npm run build:prod
+            displayName: Production build
+          - script: npm run package
+            displayName: Package VSIX
+          - script: npm run check:bundle-size
+            displayName: Bundle size regression gate
+          - bash: |
+              mkdir -p "$(Build.ArtifactStagingDirectory)"
+              cp ./*.vsix "$(Build.ArtifactStagingDirectory)/"
+            displayName: Stage VSIX artifact
+          - publish: $(Build.ArtifactStagingDirectory)
+            displayName: Publish VSIX artifact
+            artifact: kicadstudio-vsix
