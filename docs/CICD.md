@@ -25,6 +25,13 @@ KiCad Studio keeps the personal GitHub repository as the primary source mirror a
 
 Configure these in the `oaslananka-lab/kicad-studio` repository or organization:
 
+- `DOPPLER_TOKEN`: Doppler service token with read access to the release config.
+- `DOPPLER_PROJECT`: Doppler project name, for example `all`.
+- `DOPPLER_CONFIG`: Doppler config name, for example `main`.
+
+The release workflow reads publish credentials from Doppler at runtime. The Doppler config must
+provide:
+
 - `VSCE_PAT`: Visual Studio Marketplace publish token.
 - `OVSX_PAT`: Open VSX publish token, only needed when Open VSX publishing is requested.
 

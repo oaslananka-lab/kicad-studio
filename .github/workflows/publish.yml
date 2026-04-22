@@ -82,9 +82,14 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:prod
-      - run: npm run publish
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      - name: Publish extension with Doppler secrets
+        run: doppler run --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" -- npm run publish
         env:
-          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_PROJECT: ${{ secrets.DOPPLER_PROJECT }}
+          DOPPLER_CONFIG: ${{ secrets.DOPPLER_CONFIG }}
 
   publish-open-vsx:
     needs: package
@@ -101,6 +106,11 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:prod
-      - run: npx ovsx publish -p "$OVSX_PAT"
+      - name: Install Doppler CLI
+        uses: dopplerhq/cli-action@v3
+      - name: Publish Open VSX package with Doppler secrets
+        run: doppler run --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" -- npx ovsx publish -p "$OVSX_PAT"
         env:
-          OVSX_PAT: ${{ secrets.OVSX_PAT }}
+          DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
+          DOPPLER_PROJECT: ${{ secrets.DOPPLER_PROJECT }}
+          DOPPLER_CONFIG: ${{ secrets.DOPPLER_CONFIG }}
