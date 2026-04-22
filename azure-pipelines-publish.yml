@@ -1,7 +1,4 @@
-trigger:
-  tags:
-    include:
-      - v*
+trigger: none
 pr: none
 
 parameters:
@@ -12,7 +9,7 @@ parameters:
 variables:
   - group: kicadstudio-secrets
   - name: NodeVersion
-    value: "20.x"
+    value: '20.x'
 
 stages:
   - stage: Package
@@ -67,8 +64,8 @@ stages:
             inputs:
               instructions: |
                 Review the packaged VSIX artifact and approve only when you want to publish KiCad Studio to the VS Code Marketplace.
-                This publish pipeline is intentionally manual and Azure DevOps is the source of truth for release approval.
-                GitHub Actions remain manual fallback workflows only and should not be treated as the release gate.
+                This Azure DevOps pipeline is intentionally manual fallback only.
+                Primary automated CI/CD is owned by the oaslananka-lab GitHub organization repository.
               onTimeout: reject
 
   - stage: Publish
@@ -97,5 +94,5 @@ stages:
             env:
               VSCE_PAT: $(VSCE_PAT)
           - ${{ if eq(parameters.publishToOpenVsx, true) }}:
-            - script: npx ovsx publish -p $(OVSX_PAT)
-              displayName: Publish to Open VSX
+              - script: npx ovsx publish -p $(OVSX_PAT)
+                displayName: Publish to Open VSX

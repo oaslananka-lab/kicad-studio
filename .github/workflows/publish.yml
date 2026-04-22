@@ -1,11 +1,79 @@
-name: Publish Manual Fallback
+name: KiCad Studio Release
 
 on:
+  push:
+    tags:
+      - 'v*'
   workflow_dispatch:
+    inputs:
+      publish:
+        description: 'Publish to VS Code Marketplace after packaging'
+        required: true
+        default: false
+        type: boolean
+      publishOpenVsx:
+        description: 'Also publish to Open VSX'
+        required: true
+        default: false
+        type: boolean
 
 jobs:
-  package-only:
+  package:
+    if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-latest
+    outputs:
+      should_publish: ${{ steps.route.outputs.should_publish }}
+      should_publish_open_vsx: ${{ steps.route.outputs.should_publish_open_vsx }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+      - id: route
+        name: Decide release route
+        shell: bash
+        run: |
+          should_publish=false
+          should_publish_open_vsx=false
+          if [ "${{ github.repository_owner }}" = "oaslananka-lab" ] && [ "${{ github.event_name }}" = "push" ]; then
+            should_publish=true
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publish }}" = "true" ]; then
+            should_publish=true
+          fi
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ] && [ "${{ inputs.publishOpenVsx }}" = "true" ]; then
+            should_publish_open_vsx=true
+          fi
+          echo "should_publish=$should_publish" >> "$GITHUB_OUTPUT"
+          echo "should_publish_open_vsx=$should_publish_open_vsx" >> "$GITHUB_OUTPUT"
+      - run: npm ci
+      - run: npm run audit:ci
+      - run: npm run lint
+      - run: npx tsc -p tsconfig.json --noEmit
+      - run: npm run test:unit
+      - run: npm run build:prod
+      - run: npm run package
+      - run: npm run check:bundle-size
+      - name: Release routing notice
+        run: |
+          if [ "${{ github.repository_owner }}" = "oaslananka-lab" ]; then
+            echo "oaslananka-lab owns primary CI/CD. Tag builds may publish after the GitHub Environment approval gate."
+          else
+            echo "Personal GitHub mirror is manual-only. This workflow packages unless manual publish input is enabled."
+          fi
+      - uses: actions/upload-artifact@v4
+        with:
+          name: kicadstudio-vsix
+          path: '*.vsix'
+
+  publish-marketplace:
+    needs: package
+    if: needs.package.outputs.should_publish == 'true'
+    runs-on: ubuntu-latest
+    environment: marketplace
+    permissions:
+      contents: read
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -14,10 +82,25 @@ jobs:
           cache: npm
       - run: npm ci
       - run: npm run build:prod
-      - run: npm run package
-      - name: Azure DevOps notice
-        run: echo "Marketplace publishing is handled from Azure DevOps with manual approval. This GitHub workflow only produces a fallback VSIX package."
-      - uses: actions/upload-artifact@v4
+      - run: npm run publish
+        env:
+          VSCE_PAT: ${{ secrets.VSCE_PAT }}
+
+  publish-open-vsx:
+    needs: package
+    if: needs.package.outputs.should_publish_open_vsx == 'true'
+    runs-on: ubuntu-latest
+    environment: open-vsx
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
         with:
-          name: kicadstudio-vsix-manual
-          path: "*.vsix"
+          node-version: 20
+          cache: npm
+      - run: npm ci
+      - run: npm run build:prod
+      - run: npx ovsx publish -p "$OVSX_PAT"
+        env:
+          OVSX_PAT: ${{ secrets.OVSX_PAT }}

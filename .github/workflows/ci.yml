@@ -1,11 +1,19 @@
-name: Manual Fallback CI
+name: KiCad Studio CI
 
 on:
+  push:
+    branches:
+      - main
+      - develop
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
 
 jobs:
   lint-build-test:
     name: Lint, Build, Test, Package
+    if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -20,8 +28,14 @@ jobs:
         with:
           node-version: 20
           cache: npm
-      - name: Fallback notice
-        run: echo "Azure DevOps is the primary CI/CD system. This workflow is a manual fallback only."
+      - name: CI routing notice
+        shell: bash
+        run: |
+          if [ "${{ github.repository_owner }}" = "oaslananka-lab" ]; then
+            echo "Running primary GitHub Actions CI from the oaslananka-lab organization repository."
+          else
+            echo "Running manual fallback CI from the personal mirror. Automatic CI/CD is owned by oaslananka-lab."
+          fi
       - run: npm ci
       - run: npm run lint
       - run: npx tsc -p tsconfig.json --noEmit
