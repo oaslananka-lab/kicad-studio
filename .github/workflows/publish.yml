@@ -20,16 +20,17 @@ on:
 jobs:
   package:
     if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
     runs-on: ubuntu-latest
     outputs:
       should_publish: ${{ steps.route.outputs.should_publish }}
       should_publish_open_vsx: ${{ steps.route.outputs.should_publish_open_vsx }}
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: npm
+          node-version: 24.14.1
       - id: route
         name: Decide release route
         shell: bash
@@ -47,14 +48,9 @@ jobs:
           fi
           echo "should_publish=$should_publish" >> "$GITHUB_OUTPUT"
           echo "should_publish_open_vsx=$should_publish_open_vsx" >> "$GITHUB_OUTPUT"
+      - run: npm install -g npm@11.13.0
       - run: npm ci
-      - run: npm run audit:ci
-      - run: npm run lint
-      - run: npx tsc -p tsconfig.json --noEmit
-      - run: npm run test:unit
-      - run: npm run build:prod
-      - run: npm run package
-      - run: npm run check:bundle-size
+      - run: npm run check:ci
       - name: Release routing notice
         run: |
           if [ "${{ github.repository_owner }}" = "oaslananka-lab" ]; then
@@ -62,7 +58,7 @@ jobs:
           else
             echo "Personal GitHub mirror is manual-only. This workflow packages unless manual publish input is enabled."
           fi
-      - uses: actions/upload-artifact@v4
+      - uses: actions/upload-artifact@v7
         with:
           name: kicadstudio-vsix
           path: '*.vsix'
@@ -75,11 +71,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: npm
+          node-version: 24.14.1
+          package-manager-cache: false
+      - run: npm install -g npm@11.13.0
       - run: npm ci
       - run: npm run build:prod
       - name: Install Doppler CLI
@@ -99,11 +96,12 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: npm
+          node-version: 24.14.1
+          package-manager-cache: false
+      - run: npm install -g npm@11.13.0
       - run: npm ci
       - run: npm run build:prod
       - name: Install Doppler CLI

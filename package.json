@@ -8,6 +8,19 @@
     "vscode": "^1.95.0",
     "node": ">=20.0.0"
   },
+  "packageManager": "npm@11.13.0",
+  "devEngines": {
+    "runtime": {
+      "name": "node",
+      "version": "24.14.x",
+      "onFail": "error"
+    },
+    "packageManager": {
+      "name": "npm",
+      "version": "11.13.x",
+      "onFail": "error"
+    }
+  },
   "categories": [
     "Other",
     "Linters",
@@ -1429,17 +1442,25 @@
     ]
   },
   "scripts": {
+    "prepare": "husky",
     "prepare:media": "node scripts/bundle-kicanvas.js",
     "generate:assets": "node scripts/generate-icon.js",
     "vscode:prepublish": "npm run build:prod",
     "build": "npm run prepare:media && webpack --mode production",
     "build:prod": "npm run build",
     "watch": "webpack --mode development --watch",
+    "format": "prettier --ignore-unknown --write package.json package-lock.json README.md CHANGELOG.md SECURITY.md docs/**/*.md .github/workflows/*.yml azure-pipelines-*.yml .gitlab-ci.yml .vscode/*.json tsconfig*.json .prettierrc .prettierignore .npmrc .nvmrc .node-version eslint.config.cjs jest.config.js webpack.config.js",
+    "format:check": "prettier --ignore-unknown --check package.json package-lock.json README.md CHANGELOG.md SECURITY.md docs/**/*.md .github/workflows/*.yml azure-pipelines-*.yml .gitlab-ci.yml .vscode/*.json tsconfig*.json .prettierrc .prettierignore .npmrc .nvmrc .node-version eslint.config.cjs jest.config.js webpack.config.js",
     "lint": "eslint src test scripts --ext .ts,.js",
-    "audit:ci": "npm audit --audit-level=moderate",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "audit:ci": "npm audit --audit-level=high",
+    "check:staged": "lint-staged",
+    "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:unit && npm run build",
+    "check:ci": "npm run audit:ci && npm run format:check && npm run lint && npm run typecheck && npm run test:unit:coverage && npm run build && npm run package && npm run check:bundle-size",
     "compile-tests": "tsc -p tsconfig.test.json",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "jest --runInBand",
+    "test:unit:coverage": "jest --runInBand --coverage",
     "test:integration": "node ./out/test/runTest.js",
     "test:e2e": "playwright test test/e2e/",
     "check:bundle-size": "node scripts/check-bundle-size.js",
@@ -1466,19 +1487,21 @@
     "lines": 75
   },
   "devDependencies": {
-    "@playwright/test": "^1.59.1",
     "@eslint/js": "^10.0.1",
+    "@playwright/test": "^1.59.1",
     "@types/jest": "^30.0.0",
     "@types/mocha": "^10.0.10",
     "@types/node": "^20.0.0",
-    "@types/vscode": "^1.95.0",
-    "@typescript-eslint/eslint-plugin": "^8.58.2",
-    "@typescript-eslint/parser": "^8.58.2",
+    "@types/vscode": "1.95.0",
+    "@typescript-eslint/eslint-plugin": "8.59.0",
+    "@typescript-eslint/parser": "8.59.0",
     "@vscode/test-electron": "^2.5.2",
     "@vscode/vsce": "^3.9.1",
     "c8": "^10.1.3",
     "eslint": "^10.2.1",
+    "husky": "9.1.7",
     "jest": "^30.3.0",
+    "lint-staged": "16.4.0",
     "mocha": "^11.7.5",
     "pngjs": "^7.0.0",
     "prettier": "^3.8.3",
@@ -1490,6 +1513,13 @@
   },
   "dependencies": {
     "exceljs": "^4.4.0"
+  },
+  "lint-staged": {
+    "*.{js,cjs,mjs,ts}": [
+      "eslint --fix",
+      "prettier --write"
+    ],
+    "*.{json,md,yml,yaml}": "prettier --write"
   },
   "overrides": {
     "mocha": {

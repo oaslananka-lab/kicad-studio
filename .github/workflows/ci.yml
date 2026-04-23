@@ -14,6 +14,8 @@ jobs:
   lint-build-test:
     name: Lint, Build, Test, Package
     if: github.repository_owner == 'oaslananka-lab' || github.event_name == 'workflow_dispatch'
+    permissions:
+      contents: read
     runs-on: ${{ matrix.os }}
     strategy:
       fail-fast: false
@@ -23,11 +25,10 @@ jobs:
           - windows-latest
           - macos-latest
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
         with:
-          node-version: 20
-          cache: npm
+          node-version: 24.14.1
       - name: CI routing notice
         shell: bash
         run: |
@@ -36,15 +37,11 @@ jobs:
           else
             echo "Running manual fallback CI from the personal mirror. Automatic CI/CD is owned by oaslananka-lab."
           fi
+      - run: npm install -g npm@11.13.0
       - run: npm ci
-      - run: npm run lint
-      - run: npx tsc -p tsconfig.json --noEmit
-      - run: npm run test:unit -- --coverage
-      - run: npm run build
-      - run: npm run package
-      - run: npm run check:bundle-size
+      - run: npm run check:ci
       - name: Upload coverage report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-${{ matrix.os }}
           path: coverage/

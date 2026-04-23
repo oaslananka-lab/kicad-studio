@@ -15,10 +15,10 @@ KiCad Studio turns VS Code into a practical KiCad workspace: view schematics and
 
 - GitHub mirror and Marketplace-facing repository:
   `https://github.com/oaslananka/kicad-studio`
-- Primary source of truth and CI/CD:
-  `https://dev.azure.com/oaslananka/open-source/_git/kicad-studio`
-- GitHub Actions are kept as manual fallback workflows only.
-- Azure DevOps runs the main CI pipeline and the approval-gated publish flow.
+- Automated CI/CD repository:
+  `https://github.com/oaslananka-lab/kicad-studio`
+- Azure DevOps and GitLab are kept as manual fallback pipelines.
+- Personal GitHub remains the main source mirror.
 
 ## What's New For KiCad 10
 
@@ -40,19 +40,19 @@ KiCad Studio turns VS Code into a practical KiCad workspace: view schematics and
 - Optional Claude-backed Language Model Chat Provider registration for compatible VS Code builds.
 - `kicad-mcp-pro` bootstrap, context bridge, and design intent form panel.
 - Local KiCad symbol and footprint indexing plus Octopart/Nexar and LCSC component search.
-- Azure-first CI/CD with manual GitHub fallback workflows.
+- GitHub-organization-first CI/CD with Azure DevOps and GitLab manual fallback workflows.
 
 ## KiCad Support Matrix
 
-| Capability | KiCad 9 | KiCad 10 |
-| --- | --- | --- |
-| Schematic / PCB viewer | Supported | Supported with improving upstream KiCanvas coverage |
-| DRC / ERC via `kicad-cli` | Supported | Supported |
-| Design variants sidebar | Limited project fallback | Supported |
-| `.kicad_dru` rule discovery | Basic text mode | Supported |
-| 3D PDF export | Not available | Supported |
-| Time-domain tuning metadata | Not available | Supported |
-| MCP-assisted fix workflows | Supported when project context exists | Supported |
+| Capability                  | KiCad 9                               | KiCad 10                                            |
+| --------------------------- | ------------------------------------- | --------------------------------------------------- |
+| Schematic / PCB viewer      | Supported                             | Supported with improving upstream KiCanvas coverage |
+| DRC / ERC via `kicad-cli`   | Supported                             | Supported                                           |
+| Design variants sidebar     | Limited project fallback              | Supported                                           |
+| `.kicad_dru` rule discovery | Basic text mode                       | Supported                                           |
+| 3D PDF export               | Not available                         | Supported                                           |
+| Time-domain tuning metadata | Not available                         | Supported                                           |
+| MCP-assisted fix workflows  | Supported when project context exists | Supported                                           |
 
 ## AI And MCP
 
@@ -179,7 +179,12 @@ Important settings include:
 
 ### Local Commands
 
+- `npm ci`
+- `npm run check`
+- `npm run check:ci`
+- `npm run format:check`
 - `npm run lint`
+- `npm run typecheck`
 - `npm run test:unit`
 - `npm test`
 - `npm run build`
@@ -188,9 +193,9 @@ Important settings include:
 
 ### CI/CD Layout
 
-- `azure-pipelines-ci.yml` is the primary CI definition.
-- `azure-pipelines-publish.yml` is the approval-gated Marketplace publish pipeline.
-- `.github/workflows/ci.yml` and `.github/workflows/publish.yml` are manual fallback workflows only.
+- `.github/workflows/ci.yml` and `.github/workflows/publish.yml` are the primary GitHub Actions workflows for the `oaslananka-lab` organization mirror.
+- `azure-pipelines-ci.yml` and `azure-pipelines-publish.yml` are manual fallback Azure pipelines.
+- `.gitlab-ci.yml` is a manual fallback GitLab pipeline.
 
 ## Contributing
 

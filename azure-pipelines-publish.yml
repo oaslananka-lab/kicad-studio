@@ -9,7 +9,7 @@ parameters:
 variables:
   - group: kicadstudio-secrets
   - name: NodeVersion
-    value: '20.x'
+    value: '24.14.1'
 
 stages:
   - stage: Package
@@ -25,22 +25,12 @@ stages:
             displayName: Use Node.js $(NodeVersion)
             inputs:
               version: $(NodeVersion)
+          - script: npm install -g npm@11.13.0
+            displayName: Pin npm toolchain
           - script: npm ci
             displayName: Install dependencies
-          - script: npm run audit:ci
-            displayName: Audit dependencies
-          - script: npm run lint
-            displayName: Lint
-          - script: npx tsc -p tsconfig.json --noEmit
-            displayName: Type check
-          - script: npm run test:unit
-            displayName: Unit tests
-          - script: npm run build:prod
-            displayName: Production build
-          - script: npm run package
-            displayName: Package VSIX
-          - script: npm run check:bundle-size
-            displayName: Bundle size regression gate
+          - script: npm run check:ci
+            displayName: CI package gate
           - bash: |
               mkdir -p "$(Build.ArtifactStagingDirectory)"
               cp ./*.vsix "$(Build.ArtifactStagingDirectory)/"
@@ -83,6 +73,8 @@ stages:
             displayName: Use Node.js $(NodeVersion)
             inputs:
               version: $(NodeVersion)
+          - script: npm install -g npm@11.13.0
+            displayName: Pin npm toolchain
           - script: npm ci
             displayName: Install dependencies
           - script: npm run audit:ci

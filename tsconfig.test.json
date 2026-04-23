@@ -5,19 +5,12 @@
     "outDir": "out",
     "sourceMap": true,
     "rootDir": ".",
-    "types": [
-      "node",
-      "vscode",
-      "mocha"
-    ]
+    "types": ["node", "vscode", "mocha"]
   },
   "include": [
     "test/runTest.ts",
     "test/suite/**/*.ts",
     "test/integration/**/*.ts"
   ],
-  "exclude": [
-    "dist",
-    "node_modules"
-  ]
+  "exclude": ["dist", "node_modules"]
 }
