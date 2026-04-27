@@ -86,9 +86,9 @@ jobs:
         shell: bash
         run: |
           if [ -n "${VSCE_PAT:-}" ]; then
-            npm run publish
+            npm run publish -- --skip-duplicate
           else
-            doppler run --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" -- npm run publish
+            doppler run --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" -- npm run publish -- --skip-duplicate
           fi
         env:
           VSCE_PAT: ${{ secrets.VSCE_PAT }}
@@ -118,9 +118,9 @@ jobs:
         shell: bash
         run: |
           if [ -n "${OVSX_PAT:-}" ]; then
-            npx ovsx publish -p "$OVSX_PAT"
+            npx ovsx publish --skip-duplicate -p "$OVSX_PAT"
           else
-            doppler run --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" -- sh -c 'npx ovsx publish -p "$OVSX_PAT"'
+            doppler run --project "$DOPPLER_PROJECT" --config "$DOPPLER_CONFIG" -- sh -c 'npx ovsx publish --skip-duplicate -p "$OVSX_PAT"'
           fi
         env:
           OVSX_PAT: ${{ secrets.OVSX_PAT }}
