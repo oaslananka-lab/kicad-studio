@@ -15,7 +15,9 @@ describe('DrcRulesProvider', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (workspace.findFiles as jest.Mock).mockResolvedValue([vscode.Uri.file(fixturePath)]);
+    (workspace.findFiles as jest.Mock).mockResolvedValue([
+      vscode.Uri.file(fixturePath)
+    ]);
   });
 
   it('loads rule names, conditions, and constraints from a .kicad_dru file', async () => {
@@ -25,7 +27,10 @@ describe('DrcRulesProvider', () => {
 
     const items = provider.getChildren();
     expect(items).toHaveLength(2);
-    expect(items.map((item) => item.name)).toEqual(['min_usb_clearance', 'rf_keepout']);
+    expect(items.map((item) => item.name)).toEqual([
+      'min_usb_clearance',
+      'rf_keepout'
+    ]);
     expect(items[0]?.constraint).toContain('clearance min 0.20mm');
     expect(items[1]?.condition).toContain("A.Footprint == 'RF_ANT'");
   });
@@ -49,7 +54,9 @@ describe('DrcRulesProvider', () => {
     const provider = new DrcRulesProvider(new SExpressionParser());
     const revealRange = jest.fn();
     const editor = { selection: undefined, revealRange };
-    (workspace.openTextDocument as jest.Mock).mockResolvedValue({ uri: vscode.Uri.file(fixturePath) });
+    (workspace.openTextDocument as jest.Mock).mockResolvedValue({
+      uri: vscode.Uri.file(fixturePath)
+    });
     (window.showTextDocument as jest.Mock).mockResolvedValue(editor);
 
     await provider.reveal({
@@ -71,5 +78,32 @@ describe('DrcRulesProvider', () => {
     await (provider as any).load();
 
     expect(provider.getChildren()).toEqual([]);
+  });
+
+  it('loads and merges rules from every .kicad_dru file in the workspace', async () => {
+    const extraFile = path.join(
+      process.cwd(),
+      'test',
+      'fixtures',
+      'kicad10',
+      'extra_rules.kicad_dru'
+    );
+    (workspace.findFiles as jest.Mock).mockResolvedValue([
+      vscode.Uri.file(fixturePath),
+      vscode.Uri.file(extraFile)
+    ]);
+    const provider = new DrcRulesProvider(new SExpressionParser());
+
+    await (provider as any).load();
+
+    expect(
+      provider
+        .getChildren()
+        .map((item) => `${path.basename(item.file)}:${item.name}`)
+    ).toEqual([
+      'custom_drc.kicad_dru:min_usb_clearance',
+      'custom_drc.kicad_dru:rf_keepout',
+      'extra_rules.kicad_dru:power_clearance'
+    ]);
   });
 });

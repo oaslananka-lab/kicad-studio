@@ -1,3 +1,4 @@
+/* global acquireVsCodeApi, atob, customElements, document, TextDecoder, window */
 (function () {
   const vscode = acquireVsCodeApi();
   const leftContainer = document.getElementById('viewer-left-container');
@@ -31,7 +32,11 @@
       customElements.whenDefined(tagName),
       new Promise((_, reject) => {
         window.setTimeout(() => {
-          reject(new Error(`${tagName} was not registered by KiCanvas within ${timeoutMs / 1000}s.`));
+          reject(
+            new Error(
+              `${tagName} was not registered by KiCanvas within ${timeoutMs / 1000}s.`
+            )
+          );
         }, timeoutMs);
       })
     ]);
@@ -144,6 +149,32 @@
     diffList.replaceChildren(fragment);
   }
 
+  function renderComponentOverlays(container, components, side) {
+    container
+      .querySelectorAll('.diff-component-overlay')
+      .forEach((overlay) => overlay.remove());
+    const overlayRoot = document.createElement('div');
+    overlayRoot.className = 'diff-component-overlays';
+    for (const component of components || []) {
+      const overlay = document.createElement('button');
+      overlay.className = 'diff-component-overlay';
+      overlay.dataset.reference = component.reference || component.uuid || '';
+      overlay.dataset.type = component.type || 'changed';
+      overlay.textContent = `${component.type || 'changed'} ${component.reference || component.uuid || 'object'}`;
+      overlay.addEventListener('click', () => {
+        vscode.postMessage({
+          type: 'navigate',
+          payload: {
+            reference: component.reference || component.uuid || '',
+            side
+          }
+        });
+      });
+      overlayRoot.appendChild(overlay);
+    }
+    container.appendChild(overlayRoot);
+  }
+
   async function setDiff(payload) {
     hideError();
     viewerGrid.classList.remove('left-empty', 'right-empty');
@@ -153,11 +184,22 @@
     setEmpty(rightContainer, 'Rendering Working Tree…');
 
     try {
-      const fileType = payload.fileType || (String(payload.fileName || '').endsWith('.kicad_pcb') ? 'board' : 'schematic');
-      const beforeIsEmpty = !payload.beforeBase64 || !decodeBase64Utf8(payload.beforeBase64).trimStart();
-      const afterIsEmpty = !payload.afterBase64 || !decodeBase64Utf8(payload.afterBase64).trimStart();
+      const fileType =
+        payload.fileType ||
+        (String(payload.fileName || '').endsWith('.kicad_pcb')
+          ? 'board'
+          : 'schematic');
+      const beforeIsEmpty =
+        !payload.beforeBase64 ||
+        !decodeBase64Utf8(payload.beforeBase64).trimStart();
+      const afterIsEmpty =
+        !payload.afterBase64 ||
+        !decodeBase64Utf8(payload.afterBase64).trimStart();
       viewerGrid.classList.toggle('left-empty', beforeIsEmpty && !afterIsEmpty);
-      viewerGrid.classList.toggle('right-empty', afterIsEmpty && !beforeIsEmpty);
+      viewerGrid.classList.toggle(
+        'right-empty',
+        afterIsEmpty && !beforeIsEmpty
+      );
       leftViewer = await renderKiCanvas(
         leftContainer,
         payload.beforeBase64,
@@ -176,6 +218,16 @@
         waitForViewer(leftViewer, 'HEAD'),
         waitForViewer(rightViewer, 'Working Tree')
       ]);
+      renderComponentOverlays(
+        leftContainer,
+        payload.components || [],
+        'before'
+      );
+      renderComponentOverlays(
+        rightContainer,
+        payload.components || [],
+        'after'
+      );
       statusText.textContent = payload.summary || 'Diff rendered.';
     } catch (error) {
       showError(
@@ -183,15 +235,6 @@
         error instanceof Error ? error.message : String(error)
       );
     }
-  }
-
-  function escapeHtml(value) {
-    return String(value)
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;');
   }
 
   window.addEventListener('message', (event) => {
@@ -216,7 +259,10 @@
   });
 
   window.addEventListener('unhandledrejection', (event) => {
-    const reason = event.reason instanceof Error ? event.reason.message : String(event.reason || 'Unknown error');
+    const reason =
+      event.reason instanceof Error
+        ? event.reason.message
+        : String(event.reason || 'Unknown error');
     showError('Diff viewer runtime error.', reason);
   });
 })();

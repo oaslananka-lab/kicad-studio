@@ -7,6 +7,7 @@ import { ComponentSearchCache } from './componentSearchCache';
 import { LcscClient } from './lcscClient';
 import { OctopartClient } from './octopartClient';
 import { createNonce } from '../utils/nonce';
+import type { KiCadLibraryIndexer } from '../library/libraryIndexer';
 
 export class ComponentSearchService {
   private detailsPanel: vscode.WebviewPanel | undefined;
@@ -14,14 +15,21 @@ export class ComponentSearchService {
   constructor(
     private readonly octopart: OctopartClient,
     private readonly lcsc: LcscClient,
-    private readonly cache: ComponentSearchCache
+    private readonly cache: ComponentSearchCache,
+    private readonly libraryIndexer?: KiCadLibraryIndexer | undefined
   ) {}
 
   async search(): Promise<void> {
     const sourceChoices = await vscode.window.showQuickPick(
       [
         { label: 'Octopart / Nexar', value: 'octopart', picked: true },
-        { label: 'LCSC', value: 'lcsc', picked: vscode.workspace.getConfiguration().get<boolean>(SETTINGS.enableLCSC, true) }
+        {
+          label: 'LCSC',
+          value: 'lcsc',
+          picked: vscode.workspace
+            .getConfiguration()
+            .get<boolean>(SETTINGS.enableLCSC, true)
+        }
       ],
       { canPickMany: true, title: 'Choose component sources' }
     );
@@ -42,7 +50,10 @@ export class ComponentSearchService {
       query,
       sourceChoices
         .map((item) => item.value)
-        .filter((value): value is 'octopart' | 'lcsc' => value === 'octopart' || value === 'lcsc')
+        .filter(
+          (value): value is 'octopart' | 'lcsc' =>
+            value === 'octopart' || value === 'lcsc'
+        )
     );
 
     const picked = await vscode.window.showQuickPick(
@@ -77,9 +88,14 @@ export class ComponentSearchService {
     if (
       !results.length &&
       selectedSources.has('octopart') &&
-      vscode.workspace.getConfiguration().get<boolean>(SETTINGS.enableLCSC, true)
+      vscode.workspace
+        .getConfiguration()
+        .get<boolean>(SETTINGS.enableLCSC, true)
     ) {
       results.push(...(await this.searchWithCache('lcsc', query)));
+    }
+    if (!results.length) {
+      results.push(...(await this.searchLocalLibrary(query)));
     }
 
     return results;
@@ -96,21 +112,23 @@ export class ComponentSearchService {
       this.detailsPanel.onDidDispose(() => {
         this.detailsPanel = undefined;
       });
-      this.detailsPanel.webview.onDidReceiveMessage(async (message: unknown) => {
-        if (!hasType(message, ['datasheet', 'copy-mpn'])) {
-          return;
-        }
+      this.detailsPanel.webview.onDidReceiveMessage(
+        async (message: unknown) => {
+          if (!hasType(message, ['datasheet', 'copy-mpn'])) {
+            return;
+          }
 
-        const record = asRecord(message);
-        const url = asString(record?.['url']);
-        const mpn = asString(record?.['mpn']);
-        if (message.type === 'datasheet' && url) {
-          await openDatasheet(url);
+          const record = asRecord(message);
+          const url = asString(record?.['url']);
+          const mpn = asString(record?.['mpn']);
+          if (message.type === 'datasheet' && url) {
+            await openDatasheet(url);
+          }
+          if (message.type === 'copy-mpn' && mpn) {
+            await vscode.env.clipboard.writeText(mpn);
+          }
         }
-        if (message.type === 'copy-mpn' && mpn) {
-          await vscode.env.clipboard.writeText(mpn);
-        }
-      });
+      );
     }
 
     this.detailsPanel.title = `Part: ${result.mpn || result.lcscPartNumber || 'Details'}`;
@@ -160,7 +178,10 @@ export class ComponentSearchService {
     </html>`;
   }
 
-  private async searchWithCache(source: 'octopart' | 'lcsc', query: string): Promise<ComponentSearchResult[]> {
+  private async searchWithCache(
+    source: 'octopart' | 'lcsc',
+    query: string
+  ): Promise<ComponentSearchResult[]> {
     const key = ComponentSearchCache.buildKey(query, source);
     const cached = await this.cache.get(key);
     if (cached) {
@@ -182,6 +203,55 @@ export class ComponentSearchService {
           }`
         );
       }
+      return [];
+    }
+  }
+
+  private async searchLocalLibrary(
+    query: string
+  ): Promise<ComponentSearchResult[]> {
+    if (!this.libraryIndexer) {
+      return [];
+    }
+    try {
+      if (!this.libraryIndexer.isIndexed() || this.libraryIndexer.isStale()) {
+        await this.libraryIndexer.indexAll();
+      }
+      const symbolResults = this.libraryIndexer
+        .searchSymbols(query)
+        .slice(0, 8)
+        .map((symbol) => ({
+          source: 'local' as const,
+          mpn: symbol.name,
+          manufacturer: 'Local KiCad Library',
+          description: symbol.description || symbol.name,
+          category: symbol.libraryName,
+          offers: [],
+          specs: [
+            ...symbol.keywords.map((keyword) => ({
+              name: 'Keyword',
+              value: keyword
+            })),
+            ...symbol.footprintFilters.map((filter) => ({
+              name: 'Footprint filter',
+              value: filter
+            }))
+          ]
+        }));
+      const footprintResults = this.libraryIndexer
+        .searchFootprints(query)
+        .slice(0, 8)
+        .map((footprint) => ({
+          source: 'local' as const,
+          mpn: footprint.name,
+          manufacturer: 'Local KiCad Library',
+          description: footprint.description || footprint.name,
+          category: footprint.libraryName,
+          offers: [],
+          specs: footprint.tags.map((tag) => ({ name: 'Tag', value: tag }))
+        }));
+      return [...symbolResults, ...footprintResults].slice(0, 10);
+    } catch {
       return [];
     }
   }

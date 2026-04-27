@@ -1,110 +1,183 @@
 import * as vscode from 'vscode';
 import { COMMANDS } from '../constants';
+import { registerTrustedCommand } from '../utils/workspaceTrust';
 import type { CommandServices } from './types';
 
 /**
  * Register all export and import related commands.
  */
-export function registerExportCommands(services: CommandServices): vscode.Disposable[] {
+export function registerExportCommands(
+  services: CommandServices
+): vscode.Disposable[] {
   return [
-    vscode.commands.registerCommand(COMMANDS.exportGerbers, (resource?: vscode.Uri) =>
-      services.exportService.exportGerbers(resource)
+    registerTrustedCommand(
+      COMMANDS.exportGerbers,
+      (resource?: vscode.Uri) => services.exportService.exportGerbers(resource),
+      'Export Gerbers'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportGerbersWithDrill, (resource?: vscode.Uri) =>
-      services.exportService.exportGerbersWithDrill(resource)
+    registerTrustedCommand(
+      COMMANDS.exportGerbersWithDrill,
+      (resource?: vscode.Uri) =>
+        services.exportService.exportGerbersWithDrill(resource),
+      'Export Gerbers with Drill'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportPDF, (resource?: vscode.Uri) =>
-      services.exportService.exportPDF(resource)
+    registerTrustedCommand(
+      COMMANDS.exportPDF,
+      (resource?: vscode.Uri) => services.exportService.exportPDF(resource),
+      'Export PDF'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportPCBPDF, (resource?: vscode.Uri) =>
-      services.exportService.exportPCBPDF(resource)
+    registerTrustedCommand(
+      COMMANDS.exportPCBPDF,
+      (resource?: vscode.Uri) => services.exportService.exportPCBPDF(resource),
+      'Export PCB PDF'
     ),
-    vscode.commands.registerCommand(COMMANDS.export3DPdf, (resource?: vscode.Uri) =>
-      services.exportService.export3DPdf(resource)
+    registerTrustedCommand(
+      COMMANDS.export3DPdf,
+      (resource?: vscode.Uri) => services.exportService.export3DPdf(resource),
+      'Export 3D PDF'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportSVG, (resource?: vscode.Uri) =>
-      services.exportService.exportSVG(resource)
+    registerTrustedCommand(
+      COMMANDS.exportSVG,
+      (resource?: vscode.Uri) => services.exportService.exportSVG(resource),
+      'Export SVG'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportIPC2581, (resource?: vscode.Uri) =>
-      services.exportService.exportIPC2581(resource)
+    registerTrustedCommand(
+      COMMANDS.exportIPC2581,
+      (resource?: vscode.Uri) => services.exportService.exportIPC2581(resource),
+      'Export IPC-2581'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportODB, (resource?: vscode.Uri) =>
-      services.exportService.exportODB(resource)
+    registerTrustedCommand(
+      COMMANDS.exportODB,
+      (resource?: vscode.Uri) => services.exportService.exportODB(resource),
+      'Export ODB++'
     ),
-    vscode.commands.registerCommand(COMMANDS.export3DGLB, (resource?: vscode.Uri) =>
-      services.exportService.export3DGLB(resource)
+    registerTrustedCommand(
+      COMMANDS.export3DGLB,
+      (resource?: vscode.Uri) => services.exportService.export3DGLB(resource),
+      'Export 3D GLB'
     ),
-    vscode.commands.registerCommand(COMMANDS.export3DBREP, (resource?: vscode.Uri) =>
-      services.exportService.export3DBREP(resource)
+    registerTrustedCommand(
+      COMMANDS.export3DBREP,
+      (resource?: vscode.Uri) => services.exportService.export3DBREP(resource),
+      'Export 3D BREP'
     ),
-    vscode.commands.registerCommand(COMMANDS.export3DPLY, (resource?: vscode.Uri) =>
-      services.exportService.export3DPLY(resource)
+    registerTrustedCommand(
+      COMMANDS.export3DPLY,
+      (resource?: vscode.Uri) => services.exportService.export3DPLY(resource),
+      'Export 3D PLY'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportGenCAD, (resource?: vscode.Uri) =>
-      services.exportService.exportGenCAD(resource)
+    registerTrustedCommand(
+      COMMANDS.exportGenCAD,
+      (resource?: vscode.Uri) => services.exportService.exportGenCAD(resource),
+      'Export GenCAD'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportIPCD356, (resource?: vscode.Uri) =>
-      services.exportService.exportIPCD356(resource)
+    registerTrustedCommand(
+      COMMANDS.exportIPCD356,
+      (resource?: vscode.Uri) => services.exportService.exportIPCD356(resource),
+      'Export IPC-D-356'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportDXF, (resource?: vscode.Uri) =>
-      services.exportService.exportDXF(resource)
+    registerTrustedCommand(
+      COMMANDS.exportDXF,
+      (resource?: vscode.Uri) => services.exportService.exportDXF(resource),
+      'Export DXF'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportPickAndPlace, (resource?: vscode.Uri) =>
-      services.exportService.exportPickAndPlace(resource)
+    registerTrustedCommand(
+      COMMANDS.exportPickAndPlace,
+      (resource?: vscode.Uri) =>
+        services.exportService.exportPickAndPlace(resource),
+      'Export Pick and Place'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportFootprintSVG, (resource?: vscode.Uri) =>
-      services.exportService.exportFootprintSVG(resource)
+    registerTrustedCommand(
+      COMMANDS.exportFootprintSVG,
+      (resource?: vscode.Uri) =>
+        services.exportService.exportFootprintSVG(resource),
+      'Export Footprint SVG'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportSymbolSVG, (resource?: vscode.Uri) =>
-      services.exportService.exportSymbolSVG(resource)
+    registerTrustedCommand(
+      COMMANDS.exportSymbolSVG,
+      (resource?: vscode.Uri) =>
+        services.exportService.exportSymbolSVG(resource),
+      'Export Symbol SVG'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportManufacturingPackage, (resource?: vscode.Uri) =>
-      services.exportService.exportManufacturingPackage(resource)
+    registerTrustedCommand(
+      COMMANDS.exportManufacturingPackage,
+      (resource?: vscode.Uri) =>
+        services.exportService.exportManufacturingPackage(resource),
+      'Export Manufacturing Package'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportBOMCSV, (resource?: vscode.Uri) =>
-      services.exportService.exportBOMCSV(resource)
+    registerTrustedCommand(
+      COMMANDS.exportBOMCSV,
+      (resource?: vscode.Uri) => services.exportService.exportBOMCSV(resource),
+      'Export BOM CSV'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportBOMXLSX, (resource?: vscode.Uri) =>
-      services.exportService.exportBOMXLSX(resource)
+    registerTrustedCommand(
+      COMMANDS.exportBOMXLSX,
+      (resource?: vscode.Uri) => services.exportService.exportBOMXLSX(resource),
+      'Export BOM XLSX'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportNetlist, (resource?: vscode.Uri) =>
-      services.exportService.exportNetlist(resource)
+    registerTrustedCommand(
+      COMMANDS.exportNetlist,
+      (resource?: vscode.Uri) => services.exportService.exportNetlist(resource),
+      'Export Netlist'
     ),
-    vscode.commands.registerCommand(COMMANDS.runJobset, (resource?: vscode.Uri) =>
-      services.exportService.runJobset(resource)
+    registerTrustedCommand(
+      COMMANDS.runJobset,
+      (resource?: vscode.Uri) => services.exportService.runJobset(resource),
+      'Run Jobset'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportInteractiveBOM, (resource?: vscode.Uri) =>
-      services.exportService.exportInteractiveBOM(resource)
+    registerTrustedCommand(
+      COMMANDS.exportInteractiveBOM,
+      (resource?: vscode.Uri) =>
+        services.exportService.exportInteractiveBOM(resource),
+      'Export Interactive BOM'
     ),
-    vscode.commands.registerCommand(COMMANDS.exportViewerSvg, (resource?: vscode.Uri) =>
-      services.exportService.exportSVG(resource)
+    registerTrustedCommand(
+      COMMANDS.exportViewerSvg,
+      (resource?: vscode.Uri) => services.exportService.exportSVG(resource),
+      'Export Viewer SVG'
     ),
     vscode.commands.registerCommand(COMMANDS.saveExportPreset, () =>
       services.exportService.savePreset()
     ),
-    vscode.commands.registerCommand(COMMANDS.runExportPreset, () =>
-      services.exportService.runPreset()
+    registerTrustedCommand(
+      COMMANDS.runExportPreset,
+      () => services.exportService.runPreset(),
+      'Run Export Preset'
     ),
-    vscode.commands.registerCommand(COMMANDS.importPads, () =>
-      services.importService.importBoard('pads')
+    registerTrustedCommand(
+      COMMANDS.importPads,
+      () => services.importService.importBoard('pads'),
+      'Import PADS Board'
     ),
-    vscode.commands.registerCommand(COMMANDS.importAltium, () =>
-      services.importService.importBoard('altium')
+    registerTrustedCommand(
+      COMMANDS.importAltium,
+      () => services.importService.importBoard('altium'),
+      'Import Altium Board'
     ),
-    vscode.commands.registerCommand(COMMANDS.importEagle, () =>
-      services.importService.importBoard('eagle')
+    registerTrustedCommand(
+      COMMANDS.importEagle,
+      () => services.importService.importBoard('eagle'),
+      'Import Eagle Board'
     ),
-    vscode.commands.registerCommand(COMMANDS.importCadstar, () =>
-      services.importService.importBoard('cadstar')
+    registerTrustedCommand(
+      COMMANDS.importCadstar,
+      () => services.importService.importBoard('cadstar'),
+      'Import CADSTAR Board'
     ),
-    vscode.commands.registerCommand(COMMANDS.importFabmaster, () =>
-      services.importService.importBoard('fabmaster')
+    registerTrustedCommand(
+      COMMANDS.importFabmaster,
+      () => services.importService.importBoard('fabmaster'),
+      'Import Fabmaster Board'
     ),
-    vscode.commands.registerCommand(COMMANDS.importPcad, () =>
-      services.importService.importBoard('pcad')
+    registerTrustedCommand(
+      COMMANDS.importPcad,
+      () => services.importService.importBoard('pcad'),
+      'Import P-Cad Board'
     ),
-    vscode.commands.registerCommand(COMMANDS.importSolidworks, () =>
-      services.importService.importBoard('solidworks')
+    registerTrustedCommand(
+      COMMANDS.importSolidworks,
+      () => services.importService.importBoard('solidworks'),
+      'Import SolidWorks Board'
     )
   ];
 }

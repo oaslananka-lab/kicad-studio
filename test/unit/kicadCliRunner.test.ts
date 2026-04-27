@@ -172,8 +172,12 @@ describe('KiCadCliRunner', () => {
     child?.stdout.emit('data', Buffer.from('same'));
     child?.emit('close', 0);
 
-    await expect(first).resolves.toEqual(expect.objectContaining({ stdout: 'same' }));
-    await expect(second).resolves.toEqual(expect.objectContaining({ stdout: 'same' }));
+    await expect(first).resolves.toEqual(
+      expect.objectContaining({ stdout: 'same' })
+    );
+    await expect(second).resolves.toEqual(
+      expect.objectContaining({ stdout: 'same' })
+    );
     expect(spawnMock).toHaveBeenCalledTimes(1);
   });
 
@@ -181,7 +185,12 @@ describe('KiCadCliRunner', () => {
     __setConfiguration({});
     const runner = new KiCadCliRunner(
       { detect: jest.fn().mockResolvedValue(undefined) } as never,
-      { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } as never
+      {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn()
+      } as never
     );
 
     await expect(
@@ -267,6 +276,50 @@ describe('KiCadCliRunner', () => {
 
     expect(result).toBe('payload-parsed');
     expect(onProgress).toHaveBeenCalledWith('payload');
+  });
+
+  it('truncates large stdout and stderr buffers while preserving command completion', async () => {
+    __setConfiguration({});
+    const detector = {
+      detect: jest.fn().mockResolvedValue({
+        path: '/usr/bin/kicad-cli',
+        version: '10.0.1',
+        versionLabel: 'KiCad 10.0.1',
+        source: 'path'
+      })
+    };
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+    const spawnMock = childProcess.spawn as unknown as jest.Mock;
+    spawnMock.mockImplementation(() => {
+      const child = createChildProcessMock();
+      queueMicrotask(() => {
+        child.stdout.emit('data', Buffer.alloc(10 * 1024 * 1024 + 4096, 'a'));
+        child.stderr.emit('data', Buffer.alloc(10 * 1024 * 1024 + 4096, 'b'));
+        child.emit('close', 0);
+      });
+      return child;
+    });
+
+    const runner = new KiCadCliRunner(detector as never, logger as never);
+    const result = await runner.run({
+      command: ['pcb', 'drc', 'board.kicad_pcb'],
+      cwd: tempDir,
+      progressTitle: 'DRC'
+    });
+
+    expect(result.stdout.length).toBeLessThan(10 * 1024 * 1024 + 4096);
+    expect(result.stderr.length).toBeLessThan(10 * 1024 * 1024 + 4096);
+    expect(result.stdoutTruncated).toBe(true);
+    expect(result.stderrTruncated).toBe(true);
+    expect(result.truncatedOutputBytes).toBeGreaterThan(0);
+    expect(logger.warn).toHaveBeenCalledWith(
+      expect.stringContaining('truncated')
+    );
   });
 
   it('uses file-not-found wording for missing input files and ignores broken project JSON', async () => {
@@ -367,13 +420,21 @@ describe('KiCadCliRunner', () => {
     const externalAbort = new AbortController();
     externalAbort.abort(new Error('external cancel'));
     const spawnMock = childProcess.spawn as unknown as jest.Mock;
-    spawnMock.mockImplementation((_command: string, _args: string[], options: { signal: AbortSignal }) => {
-      const child = createChildProcessMock();
-      queueMicrotask(() => {
-        child.emit('error', Object.assign(new Error('aborted'), { name: 'AbortError', cause: options.signal.reason }));
-      });
-      return child;
-    });
+    spawnMock.mockImplementation(
+      (_command: string, _args: string[], options: { signal: AbortSignal }) => {
+        const child = createChildProcessMock();
+        queueMicrotask(() => {
+          child.emit(
+            'error',
+            Object.assign(new Error('aborted'), {
+              name: 'AbortError',
+              cause: options.signal.reason
+            })
+          );
+        });
+        return child;
+      }
+    );
 
     const runner = new KiCadCliRunner(detector as never, logger as never);
 
@@ -405,14 +466,22 @@ describe('KiCadCliRunner', () => {
     };
     const spawnMock = childProcess.spawn as unknown as jest.Mock;
     let abortSignal: AbortSignal | undefined;
-    spawnMock.mockImplementation((_command: string, _args: string[], options: { signal: AbortSignal }) => {
-      abortSignal = options.signal;
-      const child = createChildProcessMock();
-      options.signal.addEventListener('abort', () => {
-        child.emit('error', Object.assign(new Error('aborted'), { name: 'AbortError', cause: options.signal.reason }));
-      });
-      return child;
-    });
+    spawnMock.mockImplementation(
+      (_command: string, _args: string[], options: { signal: AbortSignal }) => {
+        abortSignal = options.signal;
+        const child = createChildProcessMock();
+        options.signal.addEventListener('abort', () => {
+          child.emit(
+            'error',
+            Object.assign(new Error('aborted'), {
+              name: 'AbortError',
+              cause: options.signal.reason
+            })
+          );
+        });
+        return child;
+      }
+    );
 
     const runner = new KiCadCliRunner(detector as never, logger as never);
     const pending = runner.run({

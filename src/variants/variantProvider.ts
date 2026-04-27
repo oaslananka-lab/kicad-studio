@@ -3,6 +3,7 @@ import * as vscode from 'vscode';
 import { COMMANDS } from '../constants';
 import type { KiCadVariant, VariantOverride } from '../types';
 import { findFirstWorkspaceFile } from '../utils/pathUtils';
+import type { McpClient } from '../mcp/mcpClient';
 
 interface VariantDocument {
   activeVariant?: string | undefined;
@@ -17,9 +18,13 @@ class VariantTreeItem extends vscode.TreeItem {
     collapsibleState: vscode.TreeItemCollapsibleState
   ) {
     super(variant.name, collapsibleState);
-    this.description = variant.isDefault ? 'default' : `${variant.componentOverrides.length} overrides`;
+    this.description = variant.isDefault
+      ? 'default'
+      : `${variant.componentOverrides.length} overrides`;
     this.contextValue = variant.isDefault ? 'variant-default' : 'variant';
-    this.iconPath = new vscode.ThemeIcon(variant.isDefault ? 'star-full' : 'symbol-namespace');
+    this.iconPath = new vscode.ThemeIcon(
+      variant.isDefault ? 'star-full' : 'symbol-namespace'
+    );
     this.command = {
       command: COMMANDS.setActiveVariant,
       title: 'Set Active Variant',
@@ -28,15 +33,22 @@ class VariantTreeItem extends vscode.TreeItem {
   }
 }
 
-export class VariantProvider implements vscode.TreeDataProvider<KiCadVariant | VariantOverride> {
-  private readonly onDidChangeTreeDataEmitter =
-    new vscode.EventEmitter<KiCadVariant | VariantOverride | undefined>();
+export class VariantProvider implements vscode.TreeDataProvider<
+  KiCadVariant | VariantOverride
+> {
+  private readonly onDidChangeTreeDataEmitter = new vscode.EventEmitter<
+    KiCadVariant | VariantOverride | undefined
+  >();
   readonly onDidChangeTreeData = this.onDidChangeTreeDataEmitter.event;
   private variants: KiCadVariant[] = [];
   private projectFile: string | undefined;
 
+  constructor(private readonly mcpClient?: McpClient | undefined) {}
+
   refresh(): void {
-    void this.loadVariants().then(() => this.onDidChangeTreeDataEmitter.fire(undefined));
+    void this.loadVariants().then(() =>
+      this.onDidChangeTreeDataEmitter.fire(undefined)
+    );
   }
 
   getTreeItem(element: KiCadVariant | VariantOverride): vscode.TreeItem {
@@ -61,11 +73,15 @@ export class VariantProvider implements vscode.TreeDataProvider<KiCadVariant | V
       .filter(Boolean)
       .join(' · ');
     item.contextValue = 'variant-override';
-    item.iconPath = new vscode.ThemeIcon(element.enabled ? 'check' : 'circle-slash');
+    item.iconPath = new vscode.ThemeIcon(
+      element.enabled ? 'check' : 'circle-slash'
+    );
     return item;
   }
 
-  async getChildren(element?: KiCadVariant | VariantOverride): Promise<Array<KiCadVariant | VariantOverride>> {
+  async getChildren(
+    element?: KiCadVariant | VariantOverride
+  ): Promise<Array<KiCadVariant | VariantOverride>> {
     if (element && 'componentOverrides' in element) {
       return element.componentOverrides;
     }
@@ -114,7 +130,11 @@ export class VariantProvider implements vscode.TreeDataProvider<KiCadVariant | V
       componentOverrides: []
     });
     document['variants'] = serializeVariants(variants);
-    fs.writeFileSync(projectFile, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
+    fs.writeFileSync(
+      projectFile,
+      `${JSON.stringify(document, null, 2)}\n`,
+      'utf8'
+    );
     this.refresh();
   }
 
@@ -131,14 +151,21 @@ export class VariantProvider implements vscode.TreeDataProvider<KiCadVariant | V
     }));
     document['activeVariant'] = variant.name;
     document['variants'] = serializeVariants(variants);
-    fs.writeFileSync(projectFile, `${JSON.stringify(document, null, 2)}\n`, 'utf8');
+    fs.writeFileSync(
+      projectFile,
+      `${JSON.stringify(document, null, 2)}\n`,
+      'utf8'
+    );
+    await this.syncActiveVariantToMcp(variant.name);
     this.refresh();
   }
 
   async diffBom(): Promise<void> {
     await this.loadVariants();
     if (this.variants.length < 2) {
-      void vscode.window.showInformationMessage('At least two variants are required to compare BOM differences.');
+      void vscode.window.showInformationMessage(
+        'At least two variants are required to compare BOM differences.'
+      );
       return;
     }
 
@@ -150,7 +177,9 @@ export class VariantProvider implements vscode.TreeDataProvider<KiCadVariant | V
       return;
     }
     const right = await vscode.window.showQuickPick(
-      this.variants.filter((variant) => variant.name !== left).map((variant) => variant.name),
+      this.variants
+        .filter((variant) => variant.name !== left)
+        .map((variant) => variant.name),
       { title: 'Compare BOMs: second variant' }
     );
     if (!right) {
@@ -158,16 +187,24 @@ export class VariantProvider implements vscode.TreeDataProvider<KiCadVariant | V
     }
 
     const leftVariant = this.variants.find((variant) => variant.name === left);
-    const rightVariant = this.variants.find((variant) => variant.name === right);
+    const rightVariant = this.variants.find(
+      (variant) => variant.name === right
+    );
     if (!leftVariant || !rightVariant) {
       return;
     }
 
-    const changes = diffOverrides(leftVariant.componentOverrides, rightVariant.componentOverrides);
+    const changes = diffOverrides(
+      leftVariant.componentOverrides,
+      rightVariant.componentOverrides
+    );
     const message = changes.length
       ? changes.join('\n')
       : 'No component-level BOM override differences were found.';
-    void vscode.window.showInformationMessage(`Variant BOM diff\n\n${message}`, { modal: true });
+    void vscode.window.showInformationMessage(
+      `Variant BOM diff\n\n${message}`,
+      { modal: true }
+    );
   }
 
   private async loadVariants(): Promise<void> {
@@ -188,6 +225,20 @@ export class VariantProvider implements vscode.TreeDataProvider<KiCadVariant | V
     this.projectFile = await findFirstWorkspaceFile('**/*.kicad_pro');
     return this.projectFile;
   }
+
+  private async syncActiveVariantToMcp(name: string): Promise<void> {
+    if (!this.mcpClient) {
+      return;
+    }
+    try {
+      const state = await this.mcpClient.testConnection();
+      if (state.connected) {
+        await this.mcpClient.callTool('variant_set_active', { name });
+      }
+    } catch {
+      // Variant switching should remain local when MCP is unavailable.
+    }
+  }
 }
 
 function readVariantDocument(projectFile: string): VariantDocument {
@@ -205,7 +256,9 @@ function normalizeVariants(document: VariantDocument): KiCadVariant[] {
       ? document['design_variants']
       : [];
   const activeVariant =
-    typeof document['activeVariant'] === 'string' ? document['activeVariant'] : undefined;
+    typeof document['activeVariant'] === 'string'
+      ? document['activeVariant']
+      : undefined;
 
   const variants = rawVariants
     .map((value) => normalizeVariant(value, activeVariant))
@@ -270,7 +323,8 @@ function normalizeOverride(value: unknown): VariantOverride | undefined {
     return undefined;
   }
   const record = value as Record<string, unknown>;
-  const reference = typeof record['reference'] === 'string' ? record['reference'] : undefined;
+  const reference =
+    typeof record['reference'] === 'string' ? record['reference'] : undefined;
   if (!reference) {
     return undefined;
   }
@@ -291,20 +345,29 @@ function normalizeOverride(value: unknown): VariantOverride | undefined {
   return normalized;
 }
 
-function serializeVariants(variants: KiCadVariant[]): Array<Record<string, unknown>> {
+function serializeVariants(
+  variants: KiCadVariant[]
+): Array<Record<string, unknown>> {
   return variants.map((variant) => ({
     name: variant.name,
     isDefault: variant.isDefault,
     componentOverrides: variant.componentOverrides.map((override) => ({
       reference: override.reference,
       enabled: override.enabled,
-      ...(override.valueOverride ? { valueOverride: override.valueOverride } : {}),
-      ...(override.footprintOverride ? { footprintOverride: override.footprintOverride } : {})
+      ...(override.valueOverride
+        ? { valueOverride: override.valueOverride }
+        : {}),
+      ...(override.footprintOverride
+        ? { footprintOverride: override.footprintOverride }
+        : {})
     }))
   }));
 }
 
-function diffOverrides(left: VariantOverride[], right: VariantOverride[]): string[] {
+function diffOverrides(
+  left: VariantOverride[],
+  right: VariantOverride[]
+): string[] {
   const changes: string[] = [];
   const index = new Map<string, VariantOverride>();
   for (const item of left) {
@@ -317,7 +380,9 @@ function diffOverrides(left: VariantOverride[], right: VariantOverride[]): strin
       continue;
     }
     if (previous.enabled !== item.enabled) {
-      changes.push(`${item.reference}: enabled ${previous.enabled} -> ${item.enabled}`);
+      changes.push(
+        `${item.reference}: enabled ${previous.enabled} -> ${item.enabled}`
+      );
     }
     if (previous.valueOverride !== item.valueOverride) {
       changes.push(

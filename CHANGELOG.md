@@ -1,5 +1,29 @@
 # Changelog
 
+## [2.5.0] - 2026-04-27
+
+### Added
+
+- Added MCP-backed DRC rule editing, Docker/inspector-aware MCP bootstrap detection, workspace-level export presets, and an internal opt-in telemetry hook that does not send data to a network backend.
+- Added Web Worker-backed viewer source preparation, explicit metadata-first large-file messaging, KiCad 10 hop-over overlay hints, and visual diff component highlight overlays.
+- Added diagnostics aggregation so syntax, DRC, and ERC diagnostics share one KiCad Diagnostics collection without overwriting each other.
+- Added focused unit coverage plus integration and E2E harness hardening for context sync, MCP retry/session persistence, workspace trust, export preset migration, CLI truncation, local component fallback, and provider streaming parity.
+
+### Changed
+
+- Hardened workspace trust behavior so KiCad CLI, external KiCad launches, import/export flows, auto-checks, CLI auto-detection, and language-model tools are gated in Restricted Mode.
+- Split viewer HTML helpers into palette, payload, template, and layer-panel modules while preserving the legacy import path.
+- Reworked MCP context pushing to use deterministic SHA-256 context hashes and source-aware throttling for save, focus, cursor, and DRC events.
+- Export presets now use schema version 2 and migrate legacy presets on load.
+
+### Fixed
+
+- Persisted MCP session IDs across extension restarts and added retry/backoff for transient MCP HTTP/network failures.
+- Loaded all `.kicad_dru` files in a workspace while keeping DRC rule reveal file-specific.
+- Preserved variant project-file persistence and added optional MCP `variant_set_active` synchronization.
+- Added local library fallback for component search when online sources fail.
+- Truncated large `kicad-cli` stdout/stderr buffers with explicit result flags to avoid excessive memory pressure.
+
 ## [2.4.5] - 2026-04-26
 
 ### Fixed

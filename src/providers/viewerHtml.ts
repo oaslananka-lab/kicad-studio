@@ -1,7 +1,10 @@
 import * as vscode from 'vscode';
 import type { ViewerMetadata, ViewerState } from '../types';
 import { createNonce } from '../utils/nonce';
-
+import { getViewerSidebarWidth } from './viewer/viewerLayerPanel';
+import { createViewerPayload } from './viewer/viewerPayload';
+import { resolveViewerPalette } from './viewer/viewerPalette';
+import { compactHtmlDocument, escapeScriptJson } from './viewer/viewerTemplate';
 
 export interface KiCanvasViewerHtmlOptions {
   title: string;
@@ -19,22 +22,24 @@ export interface KiCanvasViewerHtmlOptions {
   restoreState?: ViewerState | undefined;
 }
 
-export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): string {
+export function createKiCanvasViewerHtml(
+  options: KiCanvasViewerHtmlOptions
+): string {
   const nonce = createNonce();
   const themeName = options.theme ?? 'kicad';
   const palette = resolveViewerPalette(themeName);
   const hasLayerControls = Boolean(options.metadata?.layers?.length);
-  const sidebarWidth = hasLayerControls || options.metadata?.tuningProfiles?.length ? '320px' : '240px';
-  const payload: ViewerPayload = {
-    fileName:       options.fileName,
-    fileType:       options.fileType,
-    base64:         options.base64,
+  const sidebarWidth = getViewerSidebarWidth(options.metadata);
+  const payload = createViewerPayload({
+    fileName: options.fileName,
+    fileType: options.fileType,
+    base64: options.base64,
     disabledReason: options.disabledReason,
-    theme:          themeName,
+    theme: themeName,
     fallbackBackground: options.fallbackBackground ?? '',
     ...(options.metadata ? { metadata: options.metadata } : {}),
     ...(options.restoreState ? { restoreState: options.restoreState } : {})
-  };
+  });
 
   return compactHtmlDocument(String.raw`<!DOCTYPE html>
 <html lang="en">
@@ -51,9 +56,11 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
     font-src    ${options.cspSource} data:;
   ">
   <title>${escapeHtml(options.title)}: ${escapeHtml(options.fileName)}</title>
-  ${options.viewerCssUri
-    ? `<link rel="stylesheet" href="${escapeAttr(options.viewerCssUri)}">`
-    : ''}
+  ${
+    options.viewerCssUri
+      ? `<link rel="stylesheet" href="${escapeAttr(options.viewerCssUri)}">`
+      : ''
+  }
   <style nonce="${nonce}">
     :root {
       color-scheme: ${palette.colorScheme};
@@ -84,6 +91,7 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
 
   <main>
     <div id="viewer-mount"></div>
+    <div id="hop-over-overlay" class="hop-over-overlay" aria-label="KiCad 10 hop-over overlay" hidden></div>
     <div id="loading-overlay" class="overlay" role="status" aria-label="Loading file...">
       <div id="loading-card" class="card loading-card">
         <div class="spinner" aria-hidden="true"></div>
@@ -107,9 +115,11 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
       <div class="card">
         <h2 id="empty-title">No drawable objects yet</h2>
         <p>
-          ${options.fileType === 'board'
-            ? 'This PCB file does not contain any footprints, tracks, zones, or graphics that KiCanvas can render.'
-            : 'This schematic file does not contain any symbols, wires, labels, or other drawable objects yet.'}
+          ${
+            options.fileType === 'board'
+              ? 'This PCB file does not contain any footprints, tracks, zones, or graphics that KiCanvas can render.'
+              : 'This schematic file does not contain any symbols, wires, labels, or other drawable objects yet.'
+          }
         </p>
         <p>Add components in KiCad, save the file, and the viewer will refresh automatically.</p>
         <div id="safe-preview" aria-label="File source preview (first 3000 chars)"></div>
@@ -123,11 +133,13 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
           <button class="btn" id="fit-btn" type="button">Fit</button>
           <button class="btn" id="zoom-in-btn" type="button">+</button>
           <button class="btn" id="zoom-out-btn" type="button">-</button>
-          ${hasLayerControls
-            ? `<button class="btn" id="all-layers-btn" type="button">All</button>
+          ${
+            hasLayerControls
+              ? `<button class="btn" id="all-layers-btn" type="button">All</button>
           <button class="btn" id="none-layers-btn" type="button">None</button>
           <button class="btn" id="copper-layers-btn" type="button">Copper Only</button>`
-            : ''}
+              : ''
+          }
         </div>
         <div id="selection-summary" class="meta-row">No lasso area selected.</div>
       </div>
@@ -138,6 +150,10 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
       <div class="side-section" id="tuning-section" hidden>
         <h2>Tuning Profiles</h2>
         <div id="tuning-list" class="meta-list"></div>
+      </div>
+      <div class="side-section" id="notes-section" hidden>
+        <h2>Viewer Notes</h2>
+        <div id="notes-list" class="meta-list"></div>
       </div>
     </aside>
   </main>
@@ -160,10 +176,13 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
     const emptyTitleEl   = document.getElementById('empty-title');
     const safePreviewEl  = document.getElementById('safe-preview');
     const viewerMount    = document.getElementById('viewer-mount');
+    const hopOverOverlay = document.getElementById('hop-over-overlay');
     const layerListEl    = document.getElementById('layer-list');
     const layersSection  = document.getElementById('layers-section');
     const tuningListEl   = document.getElementById('tuning-list');
     const tuningSection  = document.getElementById('tuning-section');
+    const notesListEl    = document.getElementById('notes-list');
+    const notesSection   = document.getElementById('notes-section');
     const selectionSummaryEl = document.getElementById('selection-summary');
 
     const payload = JSON.parse(
@@ -228,6 +247,7 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
       if (msg.type === 'setMetadata') {
         payload.metadata = msg.payload || payload.metadata;
         renderSidebar();
+        renderHopOverOverlay();
       }
     });
 
@@ -251,6 +271,7 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
       fallbackSvgFitScale = 1;
       fallbackSvgScale = 1;
       viewerMount.replaceChildren();
+      clearHopOverOverlay();
       setViewerSurfaceVisible(false);
       hideAll();
       showLoading('Waiting for KiCanvas…');
@@ -270,13 +291,15 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
           return;
         }
 
-        let text;
+        let prepared;
         try {
-          text = decodeBase64Utf8(payload.base64);
+          showLoading('Decoding and normalizing file…');
+          prepared = await prepareKiCanvasText(payload.base64, payload.fileType);
         } catch (err) {
           showError('Decode error', String(err), 'Could not decode the base64 file payload.');
           return;
         }
+        const text = prepared.text;
 
         if (isUnsupportedLegacyKiCadPcb(text, payload.fileType)) {
           showEmpty(
@@ -294,7 +317,7 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
         await waitForDefinition('kicanvas-source', 8000);
 
         showLoading('Mounting viewer…');
-        const renderText = normalizeKiCanvasText(text, payload.fileType);
+        const renderText = prepared.renderText;
 
         const viewer = document.createElement('kicanvas-embed');
         viewer.setAttribute('controls',     'basic');
@@ -364,6 +387,7 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
         applyViewerState(viewer);
         installSelectionTracking(viewer);
         setViewerSurfaceVisible(true);
+        renderHopOverOverlay();
         hideAll();
         installKeyboardShortcuts(viewer);
         setStatus('Interactive renderer loaded: ' + payload.fileName);
@@ -566,6 +590,134 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
       );
     }
 
+    async function prepareKiCanvasText(base64, fileType) {
+      if (typeof Worker === 'undefined' || typeof Blob === 'undefined' || typeof URL === 'undefined') {
+        const text = decodeBase64Utf8(base64);
+        return {
+          text,
+          renderText: normalizeKiCanvasText(text, fileType)
+        };
+      }
+
+      try {
+        return await prepareKiCanvasTextInWorker(base64, fileType);
+      } catch {
+        const text = decodeBase64Utf8(base64);
+        return {
+          text,
+          renderText: normalizeKiCanvasText(text, fileType)
+        };
+      }
+    }
+
+    function prepareKiCanvasTextInWorker(base64, fileType) {
+      return new Promise((resolve, reject) => {
+        const workerScript =
+          '(' + createKiCanvasPreparationWorker.toString() + ')();';
+        const workerUrl = URL.createObjectURL(
+          new Blob([workerScript], { type: 'text/javascript' })
+        );
+        const worker = new Worker(workerUrl);
+        const timeout = window.setTimeout(() => {
+          cleanup();
+          reject(new Error('Timed out preparing KiCanvas source in the worker.'));
+        }, 15000);
+
+        function cleanup() {
+          window.clearTimeout(timeout);
+          worker.terminate();
+          URL.revokeObjectURL(workerUrl);
+        }
+
+        worker.onmessage = (event) => {
+          const data = event.data || {};
+          cleanup();
+          if (data.ok) {
+            resolve({
+              text: data.text || '',
+              renderText: data.renderText || ''
+            });
+            return;
+          }
+          reject(new Error(data.message || 'Unable to prepare KiCanvas source in the worker.'));
+        };
+        worker.onerror = (event) => {
+          cleanup();
+          reject(new Error(event.message || 'KiCanvas source worker failed.'));
+        };
+        worker.postMessage({ base64, fileType });
+      });
+    }
+
+    function createKiCanvasPreparationWorker() {
+      self.onmessage = function (event) {
+        try {
+          const payload = event.data || {};
+          const text = decodeBase64Utf8(String(payload.base64 || ''));
+          self.postMessage({
+            ok: true,
+            text,
+            renderText: normalizeKiCanvasText(text, payload.fileType)
+          });
+        } catch (error) {
+          self.postMessage({
+            ok: false,
+            message: error instanceof Error ? error.message : String(error || 'Unknown worker error')
+          });
+        }
+      };
+
+      function normalizeKiCanvasText(text, fileType) {
+        if (fileType !== 'board' || new RegExp('[(]\\s*layers\\b').test(text)) return text;
+
+        const fallbackLayers = [
+          '  (layers',
+          '    (0 "F.Cu" signal)',
+          '    (31 "B.Cu" signal)',
+          '    (32 "B.Adhes" user "B.Adhesive")',
+          '    (33 "F.Adhes" user "F.Adhesive")',
+          '    (34 "B.Paste" user)',
+          '    (35 "F.Paste" user)',
+          '    (36 "B.SilkS" user "B.Silkscreen")',
+          '    (37 "F.SilkS" user "F.Silkscreen")',
+          '    (38 "B.Mask" user)',
+          '    (39 "F.Mask" user)',
+          '    (40 "Dwgs.User" user "User.Drawings")',
+          '    (41 "Cmts.User" user "User.Comments")',
+          '    (42 "Eco1.User" user "User.Eco1")',
+          '    (43 "Eco2.User" user "User.Eco2")',
+          '    (44 "Edge.Cuts" user)',
+          '    (45 "Margin" user)',
+          '    (46 "B.CrtYd" user "B.Courtyard")',
+          '    (47 "F.CrtYd" user "F.Courtyard")',
+          '    (48 "B.Fab" user)',
+          '    (49 "F.Fab" user)',
+          '    (50 "User.1" user)',
+          '    (51 "User.2" user)',
+          '    (52 "User.3" user)',
+          '    (53 "User.4" user)',
+          '    (54 "User.5" user)',
+          '    (55 "User.6" user)',
+          '    (56 "User.7" user)',
+          '    (57 "User.8" user)',
+          '    (58 "User.9" user)',
+          '  )'
+        ].join('\n');
+
+        return text.replace(
+          new RegExp('^\\s*[(]\\s*kicad_pcb\\b'),
+          '(kicad_pcb\n' + fallbackLayers
+        );
+      }
+
+      function decodeBase64Utf8(value) {
+        const binary = atob(value);
+        const bytes = new Uint8Array(binary.length);
+        for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+        return new TextDecoder().decode(bytes);
+      }
+    }
+
     function decodeBase64Utf8(value) {
       const binary = atob(value);
       const bytes  = new Uint8Array(binary.length);
@@ -607,11 +759,14 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
     function renderSidebar() {
       const layers = payload.metadata?.layers || [];
       const tuningProfiles = payload.metadata?.tuningProfiles || [];
+      const notes = payload.metadata?.notes || [];
 
       layersSection.hidden = layers.length === 0;
       tuningSection.hidden = tuningProfiles.length === 0;
+      notesSection.hidden = notes.length === 0;
       layerListEl.innerHTML = '';
       tuningListEl.innerHTML = '';
+      notesListEl.innerHTML = '';
 
       if (!localState.activeLayers && layers.length) {
         localState.activeLayers = layers.filter((layer) => layer.visible !== false).map((layer) => layer.name);
@@ -651,7 +806,53 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
         tuningListEl.appendChild(row);
       }
 
+      for (const note of notes) {
+        const row = document.createElement('div');
+        row.className = 'meta-row';
+        row.textContent = note;
+        notesListEl.appendChild(row);
+      }
+
       updateSelectionSummary();
+    }
+
+    function renderHopOverOverlay() {
+      const hopOvers = payload.metadata?.hopOvers || [];
+      clearHopOverOverlay();
+      if (payload.fileType !== 'schematic' || !hopOvers.length) {
+        return;
+      }
+
+      hopOverOverlay.hidden = false;
+      const xs = hopOvers.map((point) => Number(point.x)).filter(Number.isFinite);
+      const ys = hopOvers.map((point) => Number(point.y)).filter(Number.isFinite);
+      const minX = Math.min(...xs);
+      const maxX = Math.max(...xs);
+      const minY = Math.min(...ys);
+      const maxY = Math.max(...ys);
+      const spanX = Math.max(1, maxX - minX);
+      const spanY = Math.max(1, maxY - minY);
+
+      for (const point of hopOvers) {
+        const marker = document.createElement('button');
+        marker.className = 'hop-over-marker';
+        marker.type = 'button';
+        const xRatio = xs.length === 1 ? 0.5 : (Number(point.x) - minX) / spanX;
+        const yRatio = ys.length === 1 ? 0.5 : (Number(point.y) - minY) / spanY;
+        marker.style.left = 10 + xRatio * 80 + '%';
+        marker.style.top = 10 + yRatio * 80 + '%';
+        marker.title = 'KiCad 10 hop-over at ' + point.x + ', ' + point.y;
+        marker.setAttribute('aria-label', marker.title);
+        const arc = document.createElement('span');
+        arc.className = 'hop-over-arc';
+        marker.appendChild(arc);
+        hopOverOverlay.appendChild(marker);
+      }
+    }
+
+    function clearHopOverOverlay() {
+      hopOverOverlay.replaceChildren();
+      hopOverOverlay.hidden = true;
     }
 
     function applyLayerVisibility(viewer) {
@@ -882,6 +1083,7 @@ export function createKiCanvasViewerHtml(options: KiCanvasViewerHtmlOptions): st
       wrapper.appendChild(stage);
       installFallbackNavigation(wrapper);
       viewerMount.replaceChildren(wrapper);
+      renderHopOverOverlay();
       requestAnimationFrame(() => {
         fitSvgFallback(true);
       });
@@ -1321,7 +1523,7 @@ export function createViewerErrorHtml(
 ): string {
   const message = error instanceof Error ? error.message : String(error);
   const nonce = createNonce();
-  return /* html */`<!DOCTYPE html>
+  return /* html */ `<!DOCTYPE html>
 <html lang="en">
 <head>
   <meta charset="UTF-8">
@@ -1349,24 +1551,13 @@ export function createViewerErrorHtml(
 // Utilities
 // ─────────────────────────────────────────────────────────────────────────────
 
-interface ViewerPayload {
-  fileName:       string;
-  fileType:       string;
-  base64:         string;
-  disabledReason: string;
-  theme:          string;
-  fallbackBackground: string;
-  metadata?:      ViewerMetadata | undefined;
-  restoreState?: ViewerState | undefined;
-}
-
 export function escapeHtml(value: string): string {
   return value
-    .replace(/&/g,  '&amp;')
-    .replace(/</g,  '&lt;')
-    .replace(/>/g,  '&gt;')
-    .replace(/"/g,  '&quot;')
-    .replace(/'/g,  '&#39;');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 /** Escape a value for use as an HTML attribute (inside double-quotes). */
@@ -1374,76 +1565,34 @@ function escapeAttr(value: string): string {
   return value.replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
 
-/**
- * JSON-encode a value and escape characters that could break out of a
- * <script> block.
- */
-function escapeScriptJson(value: unknown): string {
-  return JSON.stringify(value)
-    .replace(/</g,  '\\u003c')
-    .replace(/>/g,  '\\u003e')
-    .replace(/&/g,  '\\u0026')
-    .replace(/\//g, '\\u002f');
-}
-
-
-function resolveViewerPalette(theme: string): {
-  colorScheme: 'dark' | 'light';
-  bg: string;
-  panel: string;
-  card: string;
-  border: string;
-  text: string;
-  muted: string;
-  accent: string;
-  danger: string;
-  green: string;
-} {
-  if (theme === 'light') {
-    return {
-      colorScheme: 'light',
-      bg: '#f8fafc',
-      panel: 'rgba(255,255,255,0.92)',
-      card: 'rgba(255,255,255,0.78)',
-      border: 'rgba(15,23,42,0.12)',
-      text: '#0f172a',
-      muted: '#475569',
-      accent: '#0369a1',
-      danger: '#dc2626',
-      green: '#15803d'
-    };
-  }
-
-  return {
-    colorScheme: 'dark',
-    bg: '#050816',
-    panel: 'rgba(15,23,42,.94)',
-    card: 'rgba(15,23,42,.72)',
-    border: 'rgba(148,163,184,.22)',
-    text: '#e2e8f0',
-    muted: '#94a3b8',
-    accent: '#38bdf8',
-    danger: '#fca5a5',
-    green: '#86efac'
-  };
-}
-
-function compactHtmlDocument(value: string): string {
-  return value
-    .replace(/\r\n/g, '\n')
-    .replace(/^[ \t]+/gm, '')
-    .replace(/\n{2,}/g, '\n')
-    .trim();
-}
-
-export function kicanvasUri(context: vscode.ExtensionContext, webview: vscode.Webview): string {
+export function kicanvasUri(
+  context: vscode.ExtensionContext,
+  webview: vscode.Webview
+): string {
   return webview
-    .asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'kicanvas', 'kicanvas.js'))
+    .asWebviewUri(
+      vscode.Uri.joinPath(
+        context.extensionUri,
+        'media',
+        'kicanvas',
+        'kicanvas.js'
+      )
+    )
     .toString();
 }
 
-export function viewerCssUri(context: vscode.ExtensionContext, webview: vscode.Webview): string {
+export function viewerCssUri(
+  context: vscode.ExtensionContext,
+  webview: vscode.Webview
+): string {
   return webview
-    .asWebviewUri(vscode.Uri.joinPath(context.extensionUri, 'media', 'kicanvas', 'viewer.css'))
+    .asWebviewUri(
+      vscode.Uri.joinPath(
+        context.extensionUri,
+        'media',
+        'kicanvas',
+        'viewer.css'
+      )
+    )
     .toString();
 }

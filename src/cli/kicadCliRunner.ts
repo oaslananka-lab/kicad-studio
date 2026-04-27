@@ -3,11 +3,17 @@ import * as path from 'node:path';
 import { spawn } from 'node:child_process';
 import * as vscode from 'vscode';
 import { CLI_TIMEOUT_MS, SETTINGS } from '../constants';
-import { CliExitError, KiCadCliNotFoundError, KiCadCliTimeoutError } from '../errors';
+import {
+  CliExitError,
+  KiCadCliNotFoundError,
+  KiCadCliTimeoutError
+} from '../errors';
 import type { CliResult, CliRunOptions } from '../types';
 import { Logger } from '../utils/logger';
 import { findSiblingProjectFile } from '../utils/pathUtils';
 import { KiCadCliDetector } from './kicadCliDetector';
+
+const CLI_OUTPUT_LIMIT_BYTES = 10 * 1024 * 1024;
 
 /**
  * Runs kicad-cli commands with progress reporting and request de-duplication.
@@ -47,7 +53,9 @@ export class KiCadCliRunner {
       async (progress, token) => {
         const progressAbort = new AbortController();
         token.onCancellationRequested(() =>
-          progressAbort.abort(new Error(`KiCad command cancelled: ${options.command.join(' ')}`))
+          progressAbort.abort(
+            new Error(`KiCad command cancelled: ${options.command.join(' ')}`)
+          )
         );
         const result = await this.run<T>({
           ...options,
@@ -59,7 +67,9 @@ export class KiCadCliRunner {
             }
           }
         });
-        return (result.parsed as T | undefined) ?? (result.stdout as unknown as T);
+        return (
+          (result.parsed as T | undefined) ?? (result.stdout as unknown as T)
+        );
       }
     );
   }
@@ -71,13 +81,18 @@ export class KiCadCliRunner {
     this.controllers.clear();
   }
 
-  private async executeCommand<T>(options: CliRunOptions): Promise<CliResult<T>> {
+  private async executeCommand<T>(
+    options: CliRunOptions
+  ): Promise<CliResult<T>> {
     const detected = await this.detector.detect(true);
     if (!detected) {
       throw new KiCadCliNotFoundError();
     }
 
-    const command = this.buildCommandWithDefineVars(options.command, options.cwd);
+    const command = this.buildCommandWithDefineVars(
+      options.command,
+      options.cwd
+    );
     const controller = new AbortController();
     const signal = composeAbortSignals(options.signal, controller.signal);
     this.controllers.add(controller);
@@ -94,8 +109,15 @@ export class KiCadCliRunner {
 
       let stdout = '';
       let stderr = '';
+      let stdoutBytes = 0;
+      let stderrBytes = 0;
+      let stdoutTruncated = false;
+      let stderrTruncated = false;
+      let truncatedOutputBytes = 0;
       const timeout = setTimeout(() => {
-        controller.abort(new KiCadCliTimeoutError(command.join(' '), CLI_TIMEOUT_MS));
+        controller.abort(
+          new KiCadCliTimeoutError(command.join(' '), CLI_TIMEOUT_MS)
+        );
       }, CLI_TIMEOUT_MS);
 
       const finish = (handler: () => void): void => {
@@ -106,20 +128,52 @@ export class KiCadCliRunner {
 
       child.stdout.on('data', (chunk: Buffer) => {
         const text = chunk.toString('utf8');
-        stdout += text;
+        const appended = appendBoundedOutput({
+          current: stdout,
+          chunk,
+          currentBytes: stdoutBytes,
+          streamName: 'stdout',
+          alreadyTruncated: stdoutTruncated
+        });
+        stdout = appended.value;
+        stdoutBytes = appended.bytes;
+        stdoutTruncated = appended.truncated;
+        truncatedOutputBytes += appended.truncatedBytes;
+        if (appended.truncatedBytes > 0) {
+          this.logger.warn(
+            `KiCad CLI stdout was truncated after ${CLI_OUTPUT_LIMIT_BYTES} bytes.`
+          );
+        }
         options.onProgress?.(text.trim());
         this.logger.info(text.trimEnd());
       });
 
       child.stderr.on('data', (chunk: Buffer) => {
         const text = chunk.toString('utf8');
-        stderr += text;
+        const appended = appendBoundedOutput({
+          current: stderr,
+          chunk,
+          currentBytes: stderrBytes,
+          streamName: 'stderr',
+          alreadyTruncated: stderrTruncated
+        });
+        stderr = appended.value;
+        stderrBytes = appended.bytes;
+        stderrTruncated = appended.truncated;
+        truncatedOutputBytes += appended.truncatedBytes;
+        if (appended.truncatedBytes > 0) {
+          this.logger.warn(
+            `KiCad CLI stderr was truncated after ${CLI_OUTPUT_LIMIT_BYTES} bytes.`
+          );
+        }
         options.onProgress?.(text.trim());
         this.logger.warn(text.trimEnd());
       });
 
       child.on('error', (error) => {
-        finish(() => reject(this.normalizeError(error, options.command.join(' '))));
+        finish(() =>
+          reject(this.normalizeError(error, options.command.join(' ')))
+        );
       });
 
       child.on('close', (exitCode) => {
@@ -129,7 +183,10 @@ export class KiCadCliRunner {
             stderr,
             exitCode: exitCode ?? -1,
             durationMs: Date.now() - startedAt,
-            parsed: options.parseOutput?.(stdout, stderr) as T | undefined
+            parsed: options.parseOutput?.(stdout, stderr) as T | undefined,
+            ...(stdoutTruncated ? { stdoutTruncated } : {}),
+            ...(stderrTruncated ? { stderrTruncated } : {}),
+            ...(truncatedOutputBytes ? { truncatedOutputBytes } : {})
           };
 
           if ((exitCode ?? -1) !== 0) {
@@ -160,7 +217,9 @@ export class KiCadCliRunner {
       if (error.cause instanceof Error) {
         return error.cause;
       }
-      return new Error(`KiCad command cancelled before completion: ${command}.`);
+      return new Error(
+        `KiCad command cancelled before completion: ${command}.`
+      );
     }
     return error instanceof Error ? error : new Error(String(error));
   }
@@ -186,16 +245,29 @@ export class KiCadCliRunner {
     };
 
     const defineArgs = Object.entries(mergedVars)
-      .filter((entry): entry is [string, string] => typeof entry[0] === 'string' && typeof entry[1] === 'string')
+      .filter(
+        (entry): entry is [string, string] =>
+          typeof entry[0] === 'string' && typeof entry[1] === 'string'
+      )
       .flatMap(([key, value]) => ['--define-var', `${key}=${value}`]);
 
     return defineArgs.length ? [...defineArgs, ...command] : command;
   }
 
-  private readProjectTextVariables(command: string[], cwd: string): Record<string, string> {
-    const targetFile = command.find((entry) => entry.endsWith('.kicad_pro') || entry.endsWith('.kicad_sch') || entry.endsWith('.kicad_pcb'));
+  private readProjectTextVariables(
+    command: string[],
+    cwd: string
+  ): Record<string, string> {
+    const targetFile = command.find(
+      (entry) =>
+        entry.endsWith('.kicad_pro') ||
+        entry.endsWith('.kicad_sch') ||
+        entry.endsWith('.kicad_pcb')
+    );
     const projectFile = targetFile
-      ? findSiblingProjectFile(path.isAbsolute(targetFile) ? targetFile : path.join(cwd, targetFile))
+      ? findSiblingProjectFile(
+          path.isAbsolute(targetFile) ? targetFile : path.join(cwd, targetFile)
+        )
       : undefined;
     if (!projectFile || !fs.existsSync(projectFile)) {
       return {};
@@ -210,6 +282,49 @@ export class KiCadCliRunner {
       return {};
     }
   }
+}
+
+function appendBoundedOutput(options: {
+  current: string;
+  chunk: Buffer;
+  currentBytes: number;
+  streamName: 'stdout' | 'stderr';
+  alreadyTruncated: boolean;
+}): {
+  value: string;
+  bytes: number;
+  truncated: boolean;
+  truncatedBytes: number;
+} {
+  if (options.currentBytes >= CLI_OUTPUT_LIMIT_BYTES) {
+    return {
+      value: options.current,
+      bytes: options.currentBytes + options.chunk.byteLength,
+      truncated: true,
+      truncatedBytes: options.chunk.byteLength
+    };
+  }
+
+  const remaining = CLI_OUTPUT_LIMIT_BYTES - options.currentBytes;
+  if (options.chunk.byteLength <= remaining) {
+    return {
+      value: options.current + options.chunk.toString('utf8'),
+      bytes: options.currentBytes + options.chunk.byteLength,
+      truncated: options.alreadyTruncated,
+      truncatedBytes: 0
+    };
+  }
+
+  const marker = `\n[KiCad Studio truncated ${options.streamName} after 10 MB]\n`;
+  return {
+    value:
+      options.current +
+      options.chunk.subarray(0, remaining).toString('utf8') +
+      marker,
+    bytes: options.currentBytes + options.chunk.byteLength,
+    truncated: true,
+    truncatedBytes: options.chunk.byteLength - remaining
+  };
 }
 
 function composeAbortSignals(
@@ -229,6 +344,8 @@ function composeAbortSignals(
   };
 
   primary.addEventListener('abort', () => abortFrom(primary), { once: true });
-  secondary.addEventListener('abort', () => abortFrom(secondary), { once: true });
+  secondary.addEventListener('abort', () => abortFrom(secondary), {
+    once: true
+  });
   return controller.signal;
 }

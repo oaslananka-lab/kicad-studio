@@ -21,7 +21,7 @@ export class KiCadDiagnosticsProvider {
       const issues: vscode.Diagnostic[] = [];
       for (const error of this.parser.getErrors(ast)) {
         issues.push(
-          new vscode.Diagnostic(
+          createSyntaxDiagnostic(
             new vscode.Range(
               error.line,
               error.col,
@@ -46,7 +46,11 @@ export class KiCadDiagnosticsProvider {
           : 'Unable to analyze this KiCad file. Try saving again or checking the file for malformed S-expressions.';
       const range = new vscode.Range(0, 0, 0, 1);
       this.diagnostics.set(document.uri, [
-        new vscode.Diagnostic(range, message, vscode.DiagnosticSeverity.Warning)
+        createSyntaxDiagnostic(
+          range,
+          message,
+          vscode.DiagnosticSeverity.Warning
+        )
       ]);
     }
   }
@@ -60,7 +64,7 @@ export class KiCadDiagnosticsProvider {
     if (tag && !schema.has(tag) && !this.isSafeTag(tag)) {
       const range = this.parser.getPosition(node);
       issues.push(
-        new vscode.Diagnostic(
+        createSyntaxDiagnostic(
           range,
           `Unknown KiCad node "${tag}". Check for typos or version-specific syntax.`,
           vscode.DiagnosticSeverity.Information
@@ -93,4 +97,14 @@ export class KiCadDiagnosticsProvider {
       tag.startsWith('${')
     );
   }
+}
+
+function createSyntaxDiagnostic(
+  range: vscode.Range,
+  message: string,
+  severity: vscode.DiagnosticSeverity
+): vscode.Diagnostic {
+  const diagnostic = new vscode.Diagnostic(range, message, severity);
+  diagnostic.source = 'kicad-studio:syntax';
+  return diagnostic;
 }

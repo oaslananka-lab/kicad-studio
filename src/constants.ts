@@ -9,6 +9,7 @@ export const NETLIST_VIEW_ID = 'kicadstudio.netlistView';
 export const VARIANTS_VIEW_ID = 'kicadstudio.variants';
 export const FIX_QUEUE_VIEW_ID = 'kicadstudio.fixQueue';
 export const DRC_RULES_VIEW_ID = 'kicadstudio.drcRules';
+export const KICAD_EXPORT_PRESETS_FILE = 'kicad-export-presets.json';
 export const SCHEMATIC_EDITOR_VIEW_TYPE = 'kicadstudio.schematicViewer';
 export const PCB_EDITOR_VIEW_TYPE = 'kicadstudio.pcbViewer';
 export const LARGE_FILE_BYTES = 5 * 1024 * 1024;
@@ -126,7 +127,8 @@ export const CONTEXT_KEYS = {
   kicad10Plus: 'kicadstudio.kicad10Plus',
   mcpAvailable: 'kicadstudio.mcpAvailable',
   mcpConnected: 'kicadstudio.mcpConnected',
-  hasVariants: 'kicadstudio.hasVariants'
+  hasVariants: 'kicadstudio.hasVariants',
+  workspaceTrusted: 'kicadstudio.workspaceTrusted'
 } as const;
 export const SETTINGS = {
   cliPath: 'kicadstudio.kicadCliPath',
@@ -159,7 +161,8 @@ export const SETTINGS = {
   mcpPushContext: 'kicadstudio.mcp.pushContext',
   viewerSyncTheme: 'kicadstudio.viewer.syncThemeWithVscode',
   viewerEnableLayerPanel: 'kicadstudio.viewer.enableLayerPanel',
-  viewerEnableSnapshotExport: 'kicadstudio.viewer.enableSnapshotExport'
+  viewerEnableSnapshotExport: 'kicadstudio.viewer.enableSnapshotExport',
+  telemetryEnabled: 'kicadstudio.telemetry.enabled'
 } as const;
 export const DEFAULT_BOM_FIELDS = [
   'Reference',

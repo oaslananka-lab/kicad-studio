@@ -4,6 +4,7 @@ import { KiCadChatPanel } from '../ai/chatPanel';
 import { formatDiagnosticSummary, getActiveAiContext } from '../ai/context';
 import { buildProactiveDRCPrompt } from '../ai/prompts';
 import { resolveTargetFile } from '../utils/workspaceUtils';
+import { requireWorkspaceTrust } from '../utils/workspaceTrust';
 import type { CommandServices } from './types';
 
 /**
@@ -29,6 +30,9 @@ export function registerAiCommands(
       }
       let drcRun = latest;
       if (!drcRun) {
+        if (!(await requireWorkspaceTrust('Run proactive DRC analysis'))) {
+          return;
+        }
         const file = await resolveTargetFile(undefined, '.kicad_pcb');
         if (!file) {
           return;
@@ -47,8 +51,14 @@ export function registerAiCommands(
       const prompt = buildProactiveDRCPrompt(
         rankedDiagnostics
           .slice(0, 5)
-          .map((diagnostic) => `${diagnostic.code ?? 'rule'}: ${diagnostic.message}`),
-        [formatDiagnosticSummary(drcRun.summary), getActiveAiContext().description]
+          .map(
+            (diagnostic) =>
+              `${diagnostic.code ?? 'rule'}: ${diagnostic.message}`
+          ),
+        [
+          formatDiagnosticSummary(drcRun.summary),
+          getActiveAiContext().description
+        ]
           .filter(Boolean)
           .join('\n')
       );
@@ -58,7 +68,10 @@ export function registerAiCommands(
         services.logger,
         services.mcpClient
       );
-      await panel.submitPrompt('Analyze the latest DRC results and prioritize fixes.', prompt);
+      await panel.submitPrompt(
+        'Analyze the latest DRC results and prioritize fixes.',
+        prompt
+      );
     }),
 
     vscode.commands.registerCommand(COMMANDS.aiExplainCircuit, () =>
@@ -78,7 +91,10 @@ export function registerAiCommands(
       const provider = await services.aiProviders.getProvider();
       if (!provider?.isConfigured()) {
         services.setAiHealthy(undefined);
-        services.statusBar.update({ aiConfigured: false, aiHealthy: undefined });
+        services.statusBar.update({
+          aiConfigured: false,
+          aiHealthy: undefined
+        });
         void vscode.window.showWarningMessage(
           'AI provider is not configured. Choose a provider and store an API key first.'
         );
@@ -103,12 +119,14 @@ export function registerAiCommands(
         [
           {
             label: 'Set Claude API key',
-            description: 'Store the API key used by the KiCad Studio chat provider.',
+            description:
+              'Store the API key used by the KiCad Studio chat provider.',
             action: 'set-key'
           },
           {
             label: 'Pick Claude model',
-            description: 'Choose the model string exposed by the KiCad Studio chat provider.',
+            description:
+              'Choose the model string exposed by the KiCad Studio chat provider.',
             action: 'pick-model'
           },
           {
@@ -148,10 +166,18 @@ export function registerAiCommands(
 
         await vscode.workspace
           .getConfiguration()
-          .update(SETTINGS.aiProvider, 'claude', vscode.ConfigurationTarget.Global);
+          .update(
+            SETTINGS.aiProvider,
+            'claude',
+            vscode.ConfigurationTarget.Global
+          );
         await vscode.workspace
           .getConfiguration()
-          .update(SETTINGS.aiModel, model.trim(), vscode.ConfigurationTarget.Global);
+          .update(
+            SETTINGS.aiModel,
+            model.trim(),
+            vscode.ConfigurationTarget.Global
+          );
         void vscode.window.showInformationMessage(
           'KiCad Studio chat provider settings updated.'
         );
@@ -161,7 +187,11 @@ export function registerAiCommands(
       if (picked.action === 'test') {
         await vscode.workspace
           .getConfiguration()
-          .update(SETTINGS.aiProvider, 'claude', vscode.ConfigurationTarget.Global);
+          .update(
+            SETTINGS.aiProvider,
+            'claude',
+            vscode.ConfigurationTarget.Global
+          );
         await vscode.commands.executeCommand(COMMANDS.testAiConnection);
       }
     })

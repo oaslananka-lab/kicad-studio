@@ -9,6 +9,7 @@ import type { DiagnosticSummary, StudioContext } from '../types';
 import { ensureDirectory } from '../utils/fileUtils';
 import { getWorkspaceRoot } from '../utils/pathUtils';
 import { Logger } from '../utils/logger';
+import { isWorkspaceTrusted } from '../utils/workspaceTrust';
 import { KiCadCheckService } from '../cli/checkCommands';
 import { KiCadCliDetector } from '../cli/kicadCliDetector';
 import { KiCadCliRunner } from '../cli/kicadCliRunner';
@@ -92,11 +93,25 @@ export function registerLanguageModelTools(
 
     const lm = getLanguageModelApi();
     if (typeof lm?.registerTool !== 'function') {
-      services.logger.debug('VS Code language model tool API is unavailable on this host.');
+      services.logger.debug(
+        'VS Code language model tool API is unavailable on this host.'
+      );
       return;
     }
-    if (!vscode.workspace.getConfiguration().get<boolean>(SETTINGS.aiAllowTools, true)) {
-      services.logger.debug('Language model tools are disabled by configuration.');
+    if (
+      !vscode.workspace
+        .getConfiguration()
+        .get<boolean>(SETTINGS.aiAllowTools, true)
+    ) {
+      services.logger.debug(
+        'Language model tools are disabled by configuration.'
+      );
+      return;
+    }
+    if (!isWorkspaceTrusted()) {
+      services.logger.debug(
+        'Language model tools are disabled in restricted workspaces.'
+      );
       return;
     }
 
@@ -119,21 +134,30 @@ export function registerLanguageModelTools(
   };
 
   refresh();
-  const configurationDisposable = vscode.workspace.onDidChangeConfiguration((event) => {
-    if (event.affectsConfiguration(SETTINGS.aiAllowTools)) {
-      refresh();
+  const configurationDisposable = vscode.workspace.onDidChangeConfiguration(
+    (event) => {
+      if (event.affectsConfiguration(SETTINGS.aiAllowTools)) {
+        refresh();
+      }
     }
-  });
+  );
+  const trustDisposable =
+    typeof vscode.workspace.onDidGrantWorkspaceTrust === 'function'
+      ? vscode.workspace.onDidGrantWorkspaceTrust(refresh)
+      : { dispose(): void {} };
 
   return {
     dispose(): void {
       configurationDisposable.dispose();
+      trustDisposable.dispose();
       disposeRegistered();
     }
   };
 }
 
-function createRunDrcTool(services: LanguageModelToolServices): LanguageModelTool<DrcToolInput> {
+function createRunDrcTool(
+  services: LanguageModelToolServices
+): LanguageModelTool<DrcToolInput> {
   return {
     async prepareInvocation() {
       return {
@@ -143,11 +167,16 @@ function createRunDrcTool(services: LanguageModelToolServices): LanguageModelToo
     async invoke(options) {
       const file = await resolveTargetFile(options.input.pcbPath, '.kicad_pcb');
       if (!file) {
-        throw new Error('No KiCad PCB file is available. Provide an absolute pcbPath or open a .kicad_pcb file.');
+        throw new Error(
+          'No KiCad PCB file is available. Provide an absolute pcbPath or open a .kicad_pcb file.'
+        );
       }
 
       const result = await services.checkService.runDRC(file);
-      services.diagnosticsCollection.set(vscode.Uri.file(file), result.diagnostics);
+      services.diagnosticsCollection.set(
+        vscode.Uri.file(file),
+        result.diagnostics
+      );
       services.setLatestDrcRun({
         file,
         diagnostics: result.diagnostics,
@@ -166,7 +195,9 @@ function createRunDrcTool(services: LanguageModelToolServices): LanguageModelToo
   };
 }
 
-function createRunErcTool(services: LanguageModelToolServices): LanguageModelTool<ErcToolInput> {
+function createRunErcTool(
+  services: LanguageModelToolServices
+): LanguageModelTool<ErcToolInput> {
   return {
     async prepareInvocation() {
       return {
@@ -176,11 +207,16 @@ function createRunErcTool(services: LanguageModelToolServices): LanguageModelToo
     async invoke(options) {
       const file = await resolveTargetFile(options.input.schPath, '.kicad_sch');
       if (!file) {
-        throw new Error('No KiCad schematic file is available. Provide an absolute schPath or open a .kicad_sch file.');
+        throw new Error(
+          'No KiCad schematic file is available. Provide an absolute schPath or open a .kicad_sch file.'
+        );
       }
 
       const result = await services.checkService.runERC(file);
-      services.diagnosticsCollection.set(vscode.Uri.file(file), result.diagnostics);
+      services.diagnosticsCollection.set(
+        vscode.Uri.file(file),
+        result.diagnostics
+      );
 
       return buildToolResult(
         `ERC completed for ${path.basename(file)}: ${formatSummary(result.summary)}.`,
@@ -218,24 +254,32 @@ function createExportGerbersTool(
     async invoke(options, token) {
       const file = await resolveTargetFile(options.input.pcbPath, '.kicad_pcb');
       if (!file) {
-        throw new Error('No KiCad PCB file is available. Provide an absolute pcbPath or open a .kicad_pcb file.');
+        throw new Error(
+          'No KiCad PCB file is available. Provide an absolute pcbPath or open a .kicad_pcb file.'
+        );
       }
 
       const outputDir = resolveOutputDir(file);
       const detected = await services.cliDetector.detect(true);
       const versionMajor = Number(detected?.version.split('.')[0] ?? '9');
       const activeVariant =
-        options.input.variant?.trim() || (await services.variantProvider.getActiveVariantName());
-      const commands = buildCliExportCommands('export-gerbers', file, outputDir, { versionMajor }).map(
-        (command) => withVariantFlag(command, activeVariant, versionMajor)
-      );
+        options.input.variant?.trim() ||
+        (await services.variantProvider.getActiveVariantName());
+      const commands = buildCliExportCommands(
+        'export-gerbers',
+        file,
+        outputDir,
+        { versionMajor }
+      ).map((command) => withVariantFlag(command, activeVariant, versionMajor));
 
       for (const [index, command] of commands.entries()) {
         await services.cliRunner.run({
           command,
           cwd: path.dirname(file),
           progressTitle: `Exporting Gerbers (${index + 1}/${commands.length})`,
-          signal: token.isCancellationRequested ? AbortSignal.abort() : undefined
+          signal: token.isCancellationRequested
+            ? AbortSignal.abort()
+            : undefined
         });
       }
 
@@ -262,7 +306,9 @@ function createOpenFileTool(): LanguageModelTool<OpenFileToolInput> {
           ? {
               confirmationMessages: {
                 title: 'Open file in VS Code',
-                message: createMarkdownString(`Open \`${target}\` in the editor?`)
+                message: createMarkdownString(
+                  `Open \`${target}\` in the editor?`
+                )
               }
             }
           : {})
@@ -343,7 +389,9 @@ function createSearchFootprintTool(
       }
 
       await ensureLibraryIndex(services.libraryIndexer);
-      const results = services.libraryIndexer.searchFootprints(query).slice(0, 10);
+      const results = services.libraryIndexer
+        .searchFootprints(query)
+        .slice(0, 10);
       return buildToolResult(
         results.length
           ? `Found ${results.length} footprint matches for "${query}".`
@@ -363,7 +411,10 @@ function createGetActiveContextTool(
   return {
     async invoke() {
       const context = await services.getStudioContext();
-      return buildToolResult('Returned the active KiCad Studio context.', context);
+      return buildToolResult(
+        'Returned the active KiCad Studio context.',
+        context
+      );
     }
   };
 }
@@ -401,7 +452,9 @@ function createSwitchVariantTool(
         confirmationMessages: {
           title: 'Switch active KiCad variant',
           message: createMarkdownString(
-            target ? `Switch the active variant to \`${target}\`?` : 'Select a KiCad variant to activate.'
+            target
+              ? `Switch the active variant to \`${target}\`?`
+              : 'Select a KiCad variant to activate.'
           )
         }
       };
@@ -439,7 +492,9 @@ function formatSummary(summary: DiagnosticSummary): string {
   return `${summary.errors} errors, ${summary.warnings} warnings, ${summary.infos} infos`;
 }
 
-function serializeDiagnostic(diagnostic: vscode.Diagnostic): Record<string, unknown> {
+function serializeDiagnostic(
+  diagnostic: vscode.Diagnostic
+): Record<string, unknown> {
   return {
     message: diagnostic.message,
     severity: diagnostic.severity,
@@ -466,7 +521,10 @@ async function resolveTargetFile(
     const candidate = requestedPath.trim();
     return path.isAbsolute(candidate)
       ? candidate
-      : path.join(vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(), candidate);
+      : path.join(
+          vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? process.cwd(),
+          candidate
+        );
   }
 
   const active = vscode.window.activeTextEditor?.document.uri.fsPath;
@@ -474,14 +532,23 @@ async function resolveTargetFile(
     return active;
   }
 
-  const files = await vscode.workspace.findFiles(`**/*${extension}`, '**/node_modules/**', 1);
+  const files = await vscode.workspace.findFiles(
+    `**/*${extension}`,
+    '**/node_modules/**',
+    1
+  );
   return files[0]?.fsPath;
 }
 
 function resolveOutputDir(file: string): string {
-  const workspaceRoot = getWorkspaceRoot(vscode.Uri.file(file)) ?? path.dirname(file);
-  const configured = vscode.workspace.getConfiguration().get<string>(SETTINGS.outputDir, 'fab');
-  const outputDir = path.isAbsolute(configured) ? configured : path.join(workspaceRoot, configured);
+  const workspaceRoot =
+    getWorkspaceRoot(vscode.Uri.file(file)) ?? path.dirname(file);
+  const configured = vscode.workspace
+    .getConfiguration()
+    .get<string>(SETTINGS.outputDir, 'fab');
+  const outputDir = path.isAbsolute(configured)
+    ? configured
+    : path.join(workspaceRoot, configured);
   ensureDirectory(outputDir);
   return outputDir;
 }

@@ -1,7 +1,10 @@
 import { McpClient } from '../../src/mcp/mcpClient';
-import { __setConfiguration } from './vscodeMock';
+import { __setConfiguration, createExtensionContextMock } from './vscodeMock';
 
-function createJsonResponse(body: unknown, init?: { status?: number; headers?: Record<string, string> }) {
+function createJsonResponse(
+  body: unknown,
+  init?: { status?: number; headers?: Record<string, string> }
+) {
   return {
     ok: (init?.status ?? 200) >= 200 && (init?.status ?? 200) < 300,
     status: init?.status ?? 200,
@@ -13,7 +16,10 @@ function createJsonResponse(body: unknown, init?: { status?: number; headers?: R
   };
 }
 
-function createSseResponse(payload: string, init?: { status?: number; headers?: Record<string, string> }) {
+function createSseResponse(
+  payload: string,
+  init?: { status?: number; headers?: Record<string, string> }
+) {
   return {
     ok: (init?.status ?? 200) >= 200 && (init?.status ?? 200) < 300,
     status: init?.status ?? 200,
@@ -41,17 +47,32 @@ describe('McpClient', () => {
     global.fetch = originalFetch;
   });
 
-  function createClient() {
+  function createClient(context = createExtensionContextMock(), options = {}) {
     return new McpClient(
-      { detectKicadMcpPro: jest.fn().mockResolvedValue({ found: true, source: 'uvx' }) } as never,
-      { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() } as never
+      context as never,
+      {
+        detectKicadMcpPro: jest
+          .fn()
+          .mockResolvedValue({ found: true, source: 'uvx' })
+      } as never,
+      {
+        info: jest.fn(),
+        warn: jest.fn(),
+        error: jest.fn(),
+        debug: jest.fn()
+      } as never,
+      options
     );
   }
 
   it('initializes a session and reuses MCP-Session-Id for subsequent calls', async () => {
-    const fetchMock = jest.fn()
+    const fetchMock = jest
+      .fn()
       .mockResolvedValueOnce(
-        createJsonResponse({ result: {} }, { headers: { 'MCP-Session-Id': 'session-123' } })
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'session-123' } }
+        )
       )
       .mockResolvedValueOnce(
         createJsonResponse({
@@ -72,9 +93,13 @@ describe('McpClient', () => {
   });
 
   it('parses JSON text tool results and falls back to plain text when JSON parsing fails', async () => {
-    const fetchMock = jest.fn()
+    const fetchMock = jest
+      .fn()
       .mockResolvedValueOnce(
-        createJsonResponse({ result: {} }, { headers: { 'MCP-Session-Id': 'session-json' } })
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'session-json' } }
+        )
       )
       .mockResolvedValueOnce(
         createJsonResponse({
@@ -94,14 +119,22 @@ describe('McpClient', () => {
 
     const client = createClient();
 
-    await expect(client.callTool('tool_json', {})).resolves.toEqual({ preview: 'ready' });
-    await expect(client.callTool('tool_text', {})).resolves.toEqual({ text: 'preview unavailable' });
+    await expect(client.callTool('tool_json', {})).resolves.toEqual({
+      preview: 'ready'
+    });
+    await expect(client.callTool('tool_text', {})).resolves.toEqual({
+      text: 'preview unavailable'
+    });
   });
 
   it('parses JSON-RPC payloads returned over text/event-stream', async () => {
-    const fetchMock = jest.fn()
+    const fetchMock = jest
+      .fn()
       .mockResolvedValueOnce(
-        createJsonResponse({ result: {} }, { headers: { 'MCP-Session-Id': 'session-xyz' } })
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'session-xyz' } }
+        )
       )
       .mockResolvedValueOnce(
         createSseResponse(
@@ -116,9 +149,13 @@ describe('McpClient', () => {
   });
 
   it('reads resources as JSON when possible and as raw text otherwise', async () => {
-    const fetchMock = jest.fn()
+    const fetchMock = jest
+      .fn()
       .mockResolvedValueOnce(
-        createJsonResponse({ result: {} }, { headers: { 'MCP-Session-Id': 'session-resource' } })
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'session-resource' } }
+        )
       )
       .mockResolvedValueOnce(
         createJsonResponse({
@@ -138,21 +175,33 @@ describe('McpClient', () => {
 
     const client = createClient();
 
-    await expect(client.readResource('kicad://project/fix_queue')).resolves.toEqual({
+    await expect(
+      client.readResource('kicad://project/fix_queue')
+    ).resolves.toEqual({
       items: [{ id: 'fix-1' }]
     });
-    await expect(client.readResource('kicad://project/notes')).resolves.toEqual({ text: 'raw-text' });
+    await expect(client.readResource('kicad://project/notes')).resolves.toEqual(
+      { text: 'raw-text' }
+    );
   });
 
   it('prefers the fix queue resource and falls back to a tool call when the resource is empty', async () => {
-    const fetchMock = jest.fn()
+    const fetchMock = jest
+      .fn()
       .mockResolvedValueOnce(
-        createJsonResponse({ result: {} }, { headers: { 'MCP-Session-Id': 'session-fixes' } })
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'session-fixes' } }
+        )
       )
       .mockResolvedValueOnce(
         createJsonResponse({
           result: {
-            contents: [{ text: '{"items":[{"id":"fix-1","description":"From resource"}]}' }]
+            contents: [
+              {
+                text: '{"items":[{"id":"fix-1","description":"From resource"}]}'
+              }
+            ]
           }
         })
       )
@@ -167,7 +216,14 @@ describe('McpClient', () => {
         createJsonResponse({
           result: {
             structuredContent: {
-              items: [{ id: 'fix-2', description: 'From tool', tool: 'apply_fix', args: {} }]
+              items: [
+                {
+                  id: 'fix-2',
+                  description: 'From tool',
+                  tool: 'apply_fix',
+                  args: {}
+                }
+              ]
             }
           }
         })
@@ -180,7 +236,9 @@ describe('McpClient', () => {
       expect.arrayContaining([expect.objectContaining({ id: 'fix-1' })])
     );
     await expect(client.fetchFixQueue()).resolves.toEqual(
-      expect.arrayContaining([expect.objectContaining({ id: 'fix-2', tool: 'apply_fix' })])
+      expect.arrayContaining([
+        expect.objectContaining({ id: 'fix-2', tool: 'apply_fix' })
+      ])
     );
   });
 
@@ -190,14 +248,26 @@ describe('McpClient', () => {
       'kicadstudio.mcp.pushContext': false,
       'kicadstudio.mcp.allowLegacySse': false
     });
-    const fetchMock = jest.fn().mockResolvedValue(
-      createJsonResponse({ error: { message: 'boom' } }, { status: 500 })
-    );
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(
+        createJsonResponse({ error: { message: 'boom' } }, { status: 500 })
+      );
     global.fetch = fetchMock as typeof fetch;
 
-    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
     const client = new McpClient(
-      { detectKicadMcpPro: jest.fn().mockResolvedValue({ found: true, source: 'uvx' }) } as never,
+      createExtensionContextMock() as never,
+      {
+        detectKicadMcpPro: jest
+          .fn()
+          .mockResolvedValue({ found: true, source: 'uvx' })
+      } as never,
       logger as never
     );
 
@@ -221,10 +291,15 @@ describe('McpClient', () => {
       'kicadstudio.mcp.pushContext': true,
       'kicadstudio.mcp.allowLegacySse': true
     });
-    const fetchMock = jest.fn()
-      .mockResolvedValueOnce(createJsonResponse({ result: {} }, { status: 404 }))
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse({ result: {} }, { status: 404 })
+      )
       .mockResolvedValueOnce(createJsonResponse({ result: {} }))
-      .mockResolvedValueOnce(createJsonResponse({ result: {} }, { status: 404 }))
+      .mockResolvedValueOnce(
+        createJsonResponse({ result: {} }, { status: 404 })
+      )
       .mockResolvedValueOnce(
         createJsonResponse({
           result: {
@@ -234,22 +309,38 @@ describe('McpClient', () => {
       );
     global.fetch = fetchMock as typeof fetch;
 
-    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
     const client = new McpClient(
-      { detectKicadMcpPro: jest.fn().mockResolvedValue({ found: true, source: 'uvx' }) } as never,
+      createExtensionContextMock() as never,
+      {
+        detectKicadMcpPro: jest
+          .fn()
+          .mockResolvedValue({ found: true, source: 'uvx' })
+      } as never,
       logger as never
     );
 
-    await expect(client.callTool('legacy_tool', {})).resolves.toEqual({ fallback: true });
+    await expect(client.callTool('legacy_tool', {})).resolves.toEqual({
+      fallback: true
+    });
     expect(fetchMock.mock.calls[1]?.[0]).toBe('http://127.0.0.1:27185/sse');
     expect(fetchMock.mock.calls[3]?.[0]).toBe('http://127.0.0.1:27185/sse');
     expect(logger.warn).toHaveBeenCalled();
   });
 
   it('reports a healthy connection when tools/list succeeds', async () => {
-    const fetchMock = jest.fn()
+    const fetchMock = jest
+      .fn()
       .mockResolvedValueOnce(
-        createJsonResponse({ result: {} }, { headers: { 'MCP-Session-Id': 'session-ok' } })
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'session-ok' } }
+        )
       )
       .mockResolvedValueOnce(createJsonResponse({ result: { tools: [] } }));
     global.fetch = fetchMock as typeof fetch;
@@ -260,31 +351,60 @@ describe('McpClient', () => {
   });
 
   it('returns preview fallback text and undefined resources when MCP omits text content', async () => {
-    const fetchMock = jest.fn()
+    const fetchMock = jest
+      .fn()
       .mockResolvedValueOnce(
-        createJsonResponse({ result: {} }, { headers: { 'MCP-Session-Id': 'session-preview' } })
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'session-preview' } }
+        )
       )
-      .mockResolvedValueOnce(createJsonResponse({ result: { structuredContent: {} } }))
-      .mockResolvedValueOnce(createJsonResponse({ result: { contents: [{}] } }));
+      .mockResolvedValueOnce(
+        createJsonResponse({ result: { structuredContent: {} } })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({ result: { contents: [{}] } })
+      );
     global.fetch = fetchMock as typeof fetch;
 
     const client = createClient();
 
     await expect(
-      client.previewToolCall({ name: 'project_fix', arguments: {}, preview: 'Saved preview' })
+      client.previewToolCall({
+        name: 'project_fix',
+        arguments: {},
+        preview: 'Saved preview'
+      })
     ).resolves.toBe('Saved preview');
-    await expect(client.readResource('kicad://project/empty')).resolves.toBeUndefined();
+    await expect(
+      client.readResource('kicad://project/empty')
+    ).resolves.toBeUndefined();
   });
 
   it('logs and swallows context-push errors when MCP is enabled but unavailable', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(
-      createJsonResponse({ error: { message: 'bad gateway' } }, { status: 502 })
-    );
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(
+        createJsonResponse(
+          { error: { message: 'bad gateway' } },
+          { status: 502 }
+        )
+      );
     global.fetch = fetchMock as typeof fetch;
 
-    const logger = { info: jest.fn(), warn: jest.fn(), error: jest.fn(), debug: jest.fn() };
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
     const client = new McpClient(
-      { detectKicadMcpPro: jest.fn().mockResolvedValue({ found: true, source: 'uvx' }) } as never,
+      createExtensionContextMock() as never,
+      {
+        detectKicadMcpPro: jest
+          .fn()
+          .mockResolvedValue({ found: true, source: 'uvx' })
+      } as never,
       logger as never
     );
 
@@ -296,17 +416,94 @@ describe('McpClient', () => {
       })
     ).resolves.toBeUndefined();
 
-    expect(logger.debug).toHaveBeenCalledWith(expect.stringContaining('MCP context push skipped'));
+    expect(logger.debug).toHaveBeenCalledWith(
+      expect.stringContaining('MCP context push skipped')
+    );
   });
 
   it('reports a clear upgrade error when the server does not expose streamable HTTP', async () => {
-    const fetchMock = jest.fn().mockResolvedValue(
-      createJsonResponse({ result: {} }, { status: 404 })
-    );
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValue(createJsonResponse({ result: {} }, { status: 404 }));
     global.fetch = fetchMock as typeof fetch;
 
-    await expect(createClient().callTool('legacy_only_tool', {})).rejects.toThrow(
-      'does not expose Streamable HTTP'
+    await expect(
+      createClient().callTool('legacy_only_tool', {})
+    ).rejects.toThrow('does not expose Streamable HTTP');
+  });
+
+  it('persists session IDs in global state and reuses them after restart', async () => {
+    const context = createExtensionContextMock();
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'persisted-1' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          result: {
+            structuredContent: { first: true }
+          }
+        })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          result: {
+            structuredContent: { second: true }
+          }
+        })
+      );
+    global.fetch = fetchMock as typeof fetch;
+
+    await expect(
+      createClient(context).callTool('project_ping', {})
+    ).resolves.toEqual({ first: true });
+    expect(context.globalState.update).toHaveBeenCalledWith(
+      'kicadstudio.mcp.sessionId',
+      'persisted-1'
     );
+
+    await expect(
+      createClient(context).callTool('project_ping', {})
+    ).resolves.toEqual({ second: true });
+    expect(fetchMock).toHaveBeenCalledTimes(3);
+    expect(fetchMock.mock.calls[2]?.[1]?.headers).toEqual(
+      expect.objectContaining({ 'MCP-Session-Id': 'persisted-1' })
+    );
+  });
+
+  it('retries transient MCP failures with exponential backoff', async () => {
+    const fetchMock = jest
+      .fn()
+      .mockResolvedValueOnce(
+        createJsonResponse({ result: {} }, { status: 503 })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse(
+          { result: {} },
+          { headers: { 'MCP-Session-Id': 'retry-session' } }
+        )
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({ result: {} }, { status: 503 })
+      )
+      .mockResolvedValueOnce(
+        createJsonResponse({
+          result: {
+            structuredContent: { ok: true }
+          }
+        })
+      );
+    global.fetch = fetchMock as typeof fetch;
+
+    await expect(
+      createClient(createExtensionContextMock(), {
+        retryBaseDelayMs: 1
+      }).callTool('project_ping', {})
+    ).resolves.toEqual({ ok: true });
+    expect(fetchMock).toHaveBeenCalledTimes(4);
   });
 });

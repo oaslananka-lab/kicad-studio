@@ -15,11 +15,15 @@ export class KiCadCheckService {
     private readonly logger: Logger
   ) {}
 
-  async runDRC(pcbFile: string): Promise<{ diagnostics: vscode.Diagnostic[]; summary: DiagnosticSummary }> {
+  async runDRC(
+    pcbFile: string
+  ): Promise<{ diagnostics: vscode.Diagnostic[]; summary: DiagnosticSummary }> {
     return this.runCheck('drc', pcbFile);
   }
 
-  async runERC(schFile: string): Promise<{ diagnostics: vscode.Diagnostic[]; summary: DiagnosticSummary }> {
+  async runERC(
+    schFile: string
+  ): Promise<{ diagnostics: vscode.Diagnostic[]; summary: DiagnosticSummary }> {
     return this.runCheck('erc', schFile);
   }
 
@@ -27,11 +31,36 @@ export class KiCadCheckService {
     kind: 'drc' | 'erc',
     file: string
   ): Promise<{ diagnostics: vscode.Diagnostic[]; summary: DiagnosticSummary }> {
-    const tmpJsonFile = path.join(os.tmpdir(), `kicadstudio-${kind}-${Date.now()}.json`);
+    const tmpJsonFile = path.join(
+      os.tmpdir(),
+      `kicadstudio-${kind}-${Date.now()}.json`
+    );
     const command =
       kind === 'drc'
-        ? ['pcb', 'drc', '--output', tmpJsonFile, '--format', 'json', '--units', 'mm', '--severity-all', file]
-        : ['sch', 'erc', '--output', tmpJsonFile, '--format', 'json', '--units', 'mm', '--severity-all', file];
+        ? [
+            'pcb',
+            'drc',
+            '--output',
+            tmpJsonFile,
+            '--format',
+            'json',
+            '--units',
+            'mm',
+            '--severity-all',
+            file
+          ]
+        : [
+            'sch',
+            'erc',
+            '--output',
+            tmpJsonFile,
+            '--format',
+            'json',
+            '--units',
+            'mm',
+            '--severity-all',
+            file
+          ];
 
     try {
       await this.runner.runWithProgress<string>({
@@ -40,7 +69,7 @@ export class KiCadCheckService {
         progressTitle: kind === 'drc' ? 'Running DRC' : 'Running ERC'
       });
       const raw = fs.readFileSync(tmpJsonFile, 'utf8');
-      const diagnostics = this.parseDiagnostics(raw, file);
+      const diagnostics = this.parseDiagnostics(raw, file, kind);
       return {
         diagnostics,
         summary: this.summarize(file, kind, diagnostics)
@@ -53,7 +82,11 @@ export class KiCadCheckService {
     }
   }
 
-  private summarize(file: string, source: 'drc' | 'erc', diagnostics: vscode.Diagnostic[]): DiagnosticSummary {
+  private summarize(
+    file: string,
+    source: 'drc' | 'erc',
+    diagnostics: vscode.Diagnostic[]
+  ): DiagnosticSummary {
     let errors = 0;
     let warnings = 0;
     let infos = 0;
@@ -69,20 +102,28 @@ export class KiCadCheckService {
     return { file, source, errors, warnings, infos };
   }
 
-  private parseDiagnostics(rawJson: string, file: string): vscode.Diagnostic[] {
+  private parseDiagnostics(
+    rawJson: string,
+    file: string,
+    kind: 'drc' | 'erc'
+  ): vscode.Diagnostic[] {
     const data = JSON.parse(rawJson);
     const ast = this.parser.parse(readTextFileSync(file));
     const rows = this.collectIssueRows(data);
 
     return rows.map((row) => {
-      const range = this.findClosestRange(ast, Number(row['x'] ?? 0), Number(row['y'] ?? 0));
+      const range = this.findClosestRange(
+        ast,
+        Number(row['x'] ?? 0),
+        Number(row['y'] ?? 0)
+      );
       const severity = this.toSeverity(String(row['severity'] ?? 'warning'));
       const diagnostic = new vscode.Diagnostic(
         range,
         String(row['description'] ?? row['message'] ?? 'KiCad issue'),
         severity
       );
-      diagnostic.source = 'kicad-cli';
+      diagnostic.source = `kicad-cli:${kind}`;
       diagnostic.code = String(row['rule_name'] ?? row['rule'] ?? 'rule');
       return diagnostic;
     });
@@ -116,7 +157,8 @@ export class KiCadCheckService {
         coords: this.extractCoordinates(node)
       }))
       .filter(
-        (entry): entry is { node: SNode; coords: { x: number; y: number } } => Boolean(entry.coords)
+        (entry): entry is { node: SNode; coords: { x: number; y: number } } =>
+          Boolean(entry.coords)
       );
 
     if (!candidates.length) {
@@ -124,8 +166,10 @@ export class KiCadCheckService {
     }
 
     const closest = candidates.reduce((best, current) => {
-      const bestScore = Math.abs(best.coords.x - x) + Math.abs(best.coords.y - y);
-      const currentScore = Math.abs(current.coords.x - x) + Math.abs(current.coords.y - y);
+      const bestScore =
+        Math.abs(best.coords.x - x) + Math.abs(best.coords.y - y);
+      const currentScore =
+        Math.abs(current.coords.x - x) + Math.abs(current.coords.y - y);
       return currentScore < bestScore ? current : best;
     });
 
@@ -133,7 +177,9 @@ export class KiCadCheckService {
     return parentRange;
   }
 
-  private extractCoordinates(node: SNode): { x: number; y: number } | undefined {
+  private extractCoordinates(
+    node: SNode
+  ): { x: number; y: number } | undefined {
     const xNode = node.children?.[1];
     const yNode = node.children?.[2];
     if (!xNode || !yNode) {

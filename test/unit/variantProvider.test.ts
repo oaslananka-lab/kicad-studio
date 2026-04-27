@@ -43,7 +43,9 @@ describe('VariantProvider', () => {
       'utf8'
     );
 
-    (workspace.findFiles as jest.Mock).mockResolvedValue([vscode.Uri.file(projectFile)]);
+    (workspace.findFiles as jest.Mock).mockResolvedValue([
+      vscode.Uri.file(projectFile)
+    ]);
   });
 
   afterEach(() => {
@@ -96,8 +98,30 @@ describe('VariantProvider', () => {
       variants: Array<{ name: string; isDefault: boolean }>;
     };
     expect(saved.activeVariant).toBe('No-RF');
-    expect(saved.variants.find((item) => item.name === 'No-RF')?.isDefault).toBe(true);
-    expect(saved.variants.find((item) => item.name === 'Default')?.isDefault).toBe(false);
+    expect(
+      saved.variants.find((item) => item.name === 'No-RF')?.isDefault
+    ).toBe(true);
+    expect(
+      saved.variants.find((item) => item.name === 'Default')?.isDefault
+    ).toBe(false);
+  });
+
+  it('syncs the active variant to MCP when a client is provided', async () => {
+    const mcpClient = {
+      testConnection: jest.fn().mockResolvedValue({ connected: true }),
+      callTool: jest.fn().mockResolvedValue({})
+    };
+    const provider = new VariantProvider(mcpClient as never);
+
+    await provider.setActive({
+      name: 'No-RF',
+      isDefault: false,
+      componentOverrides: []
+    });
+
+    expect(mcpClient.callTool).toHaveBeenCalledWith('variant_set_active', {
+      name: 'No-RF'
+    });
   });
 
   it('builds tree items for variants and override rows', async () => {
@@ -132,7 +156,9 @@ describe('VariantProvider', () => {
     expect(overrideTreeItem.label).toBe('U7');
     expect(overrideTreeItem.description).toContain('disabled');
     expect(overrideTreeItem.description).toContain('value=DNP');
-    expect(overrideTreeItem.description).toContain('footprint=Connector:TestPoint');
+    expect(overrideTreeItem.description).toContain(
+      'footprint=Connector:TestPoint'
+    );
   });
 
   it('shows a helpful message when comparing BOMs without enough variants', async () => {

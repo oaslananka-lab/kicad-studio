@@ -2,7 +2,7 @@
   "name": "kicadstudio",
   "displayName": "KiCad Studio",
   "description": "The complete KiCad development environment for VS Code — view schematics & PCBs, run DRC/ERC, export production files, search components, and get AI-powered design assistance.",
-  "version": "2.4.5",
+  "version": "2.5.0",
   "publisher": "oaslananka",
   "engines": {
     "vscode": "^1.95.0",
@@ -61,6 +61,12 @@
   "homepage": "https://github.com/oaslananka/kicad-studio",
   "license": "MIT",
   "main": "./dist/extension.js",
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": "limited",
+      "description": "KiCad Studio provides read-only language and viewer features in Restricted Mode. Commands that launch kicad-cli, KiCad, or external export/import tooling require workspace trust."
+    }
+  },
   "activationEvents": [
     "workspaceContains:**/*.kicad_pro",
     "workspaceContains:**/*.kicad_jobset",
@@ -1051,6 +1057,11 @@
           "type": "array",
           "default": [],
           "description": "Saved export presets managed by the extension."
+        },
+        "kicadstudio.telemetry.enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable local KiCad Studio telemetry hooks. This build does not send telemetry to a network backend."
         }
       }
     },
@@ -1456,12 +1467,13 @@
     "audit:ci": "npm audit --audit-level=high",
     "check:staged": "lint-staged",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm run test:unit && npm run build",
-    "check:ci": "npm run audit:ci && npm run format:check && npm run lint && npm run typecheck && npm run test:unit:coverage && npm run build && npm run package && npm run check:bundle-size",
+    "check:workspace-trust": "node scripts/check-untrusted-workspace.js",
+    "check:ci": "npm run audit:ci && npm run format:check && npm run lint && npm run typecheck && npm run check:workspace-trust && npm run test:unit:coverage && npm run build && npm run package && npm run check:bundle-size",
     "compile-tests": "tsc -p tsconfig.test.json",
     "test": "npm run test:unit && npm run test:integration",
     "test:unit": "jest --runInBand",
     "test:unit:coverage": "jest --runInBand --coverage",
-    "test:integration": "node ./out/test/runTest.js",
+    "test:integration": "npm run compile-tests && node ./out/test/runTest.js",
     "test:e2e": "playwright test test/e2e/",
     "check:bundle-size": "node scripts/check-bundle-size.js",
     "bundle-kicanvas": "node scripts/bundle-kicanvas.js",
@@ -1522,6 +1534,7 @@
     "*.{json,md,yml,yaml}": "prettier --write"
   },
   "overrides": {
+    "uuid": "^14.0.0",
     "mocha": {
       "diff": "^8.0.4",
       "serialize-javascript": "^7.0.5"

@@ -46,6 +46,7 @@ import { ContextBridge } from './mcp/contextBridge';
 import { McpClient } from './mcp/mcpClient';
 import { McpDetector } from './mcp/mcpDetector';
 import { FixQueueProvider } from './mcp/fixQueueProvider';
+import { KiCadDiagnosticsAggregator } from './language/diagnosticsAggregator';
 import { KiCadDiagnosticsProvider } from './language/diagnosticsProvider';
 import { KiCadHoverProvider } from './language/hoverProvider';
 import { KiCadDocumentStore } from './language/kicadDocumentStore';
@@ -67,6 +68,7 @@ import {
   getActiveResourceUri,
   workspaceHasVariants
 } from './utils/workspaceUtils';
+import { isWorkspaceTrusted } from './utils/workspaceTrust';
 import type { DiagnosticSummary, McpInstallStatus } from './types';
 
 let extensionLogger: Logger | undefined;
@@ -106,8 +108,8 @@ export async function activate(
     presetStore,
     logger
   );
-  const diagnosticsCollection = vscode.languages.createDiagnosticCollection(
-    DIAGNOSTIC_COLLECTION_NAME
+  const diagnosticsCollection = new KiCadDiagnosticsAggregator(
+    vscode.languages.createDiagnosticCollection(DIAGNOSTIC_COLLECTION_NAME)
   );
   const diagnosticsProvider = new KiCadDiagnosticsProvider(
     parser,
@@ -133,18 +135,13 @@ export async function activate(
   const diffEditorProvider = new DiffEditorProvider(context, gitDiffDetector);
   const aiProviders = new AIProviderRegistry(context);
   const mcpDetector = new McpDetector();
-  const mcpClient = new McpClient(mcpDetector, logger);
+  const mcpClient = new McpClient(context, mcpDetector, logger);
   const contextBridge = new ContextBridge(mcpClient);
-  const variantProvider = new VariantProvider();
+  const variantProvider = new VariantProvider(mcpClient);
   const fixQueueProvider = new FixQueueProvider(mcpClient);
   const drcRulesProvider = new DrcRulesProvider(parser);
   const errorAnalyzer = new ErrorAnalyzer(aiProviders, logger);
   const circuitExplainer = new CircuitExplainer(aiProviders, logger);
-  const componentSearch = new ComponentSearchService(
-    new OctopartClient(context.secrets),
-    new LcscClient(),
-    new ComponentSearchCache(context.globalState)
-  );
   const libraryIndexer = new KiCadLibraryIndexer(context);
   const librarySearch = new LibrarySearchProvider(
     libraryIndexer,
@@ -152,6 +149,12 @@ export async function activate(
     cliDetector,
     cliRunner,
     context.extensionUri
+  );
+  const componentSearch = new ComponentSearchService(
+    new OctopartClient(context.secrets),
+    new LcscClient(),
+    new ComponentSearchCache(context.globalState),
+    libraryIndexer
   );
 
   context.subscriptions.push(
@@ -234,7 +237,7 @@ export async function activate(
       drcRulesProvider.refresh();
       void refreshContexts();
       void runConfiguredSaveChecks(document);
-      void pushStudioContext();
+      void pushStudioContext('save');
     }),
     vscode.workspace.onDidCloseTextDocument((document) => {
       diagnosticsCollection.delete(document.uri);
@@ -244,7 +247,10 @@ export async function activate(
       void refreshContexts();
       variantProvider.refresh();
       drcRulesProvider.refresh();
-      void pushStudioContext();
+      void pushStudioContext('focus');
+    }),
+    vscode.window.onDidChangeTextEditorSelection(() => {
+      void pushStudioContext('cursor');
     }),
     vscode.window.tabGroups.onDidChangeTabs(() => {
       void refreshContexts();
@@ -315,7 +321,7 @@ export async function activate(
     setAiHealthy: (value) => {
       aiHealthy = value;
     },
-    pushStudioContext,
+    pushStudioContext: () => pushStudioContext('default'),
     refreshContexts,
     refreshMcpState
   });
@@ -339,9 +345,21 @@ export async function activate(
   registerMcpServerDefinitionProvider(context, mcpDetector, logger);
   registerLanguageModelChatProvider(context, logger, buildStudioContext);
 
-  void cliDetector.detect().then((cli) => {
-    statusBar.update({ cli });
-  });
+  if (isWorkspaceTrusted()) {
+    void cliDetector.detect().then((cli) => {
+      statusBar.update({ cli });
+    });
+  }
+  if (typeof vscode.workspace.onDidGrantWorkspaceTrust === 'function') {
+    context.subscriptions.push(
+      vscode.workspace.onDidGrantWorkspaceTrust(() => {
+        void cliDetector.detect().then((cli) => {
+          statusBar.update({ cli });
+        });
+        void refreshContexts();
+      })
+    );
+  }
   void refreshMcpState();
   variantProvider.refresh();
   drcRulesProvider.refresh();
@@ -390,8 +408,9 @@ export async function activate(
           1
         )
       ).length > 0;
+    const trusted = isWorkspaceTrusted();
     const provider = await aiProviders.getProvider();
-    const cli = await cliDetector.detect();
+    const cli = trusted ? await cliDetector.detect() : undefined;
     const kicadVersionMajor = Number(cli?.version.split('.')[0] ?? '0');
     const hasVariants = await workspaceHasVariants();
     await vscode.commands.executeCommand(
@@ -429,6 +448,11 @@ export async function activate(
       CONTEXT_KEYS.hasVariants,
       hasVariants
     );
+    await vscode.commands.executeCommand(
+      'setContext',
+      CONTEXT_KEYS.workspaceTrusted,
+      isWorkspaceTrusted()
+    );
     statusBar.update({
       aiConfigured: Boolean(provider?.isConfigured()),
       aiHealthy
@@ -446,7 +470,7 @@ export async function activate(
       document.fileName.endsWith('.kicad_sch') &&
       config.get<boolean>(SETTINGS.autoRunERC, false);
 
-    if (!shouldRunDrc && !shouldRunErc) {
+    if ((!shouldRunDrc && !shouldRunErc) || !isWorkspaceTrusted()) {
       return;
     }
 
@@ -468,7 +492,7 @@ export async function activate(
           summary: result.summary
         };
         await maybeOfferProactiveDrc(result.summary, result.diagnostics.length);
-        await pushStudioContext();
+        await pushStudioContext('drc');
       }
       if (result.diagnostics.length > 0) {
         await vscode.commands.executeCommand('workbench.actions.view.problems');
@@ -624,8 +648,10 @@ export async function activate(
     };
   }
 
-  async function pushStudioContext(): Promise<void> {
-    await contextBridge.pushContext(await buildStudioContext());
+  async function pushStudioContext(
+    reason: 'save' | 'focus' | 'cursor' | 'drc' | 'default' = 'default'
+  ): Promise<void> {
+    await contextBridge.pushContext(await buildStudioContext(), reason);
   }
 }
 

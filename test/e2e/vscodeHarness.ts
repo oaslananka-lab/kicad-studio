@@ -4,7 +4,12 @@ import * as net from 'node:net';
 import * as os from 'node:os';
 import * as path from 'node:path';
 import { downloadAndUnzipVSCode } from '@vscode/test-electron';
-import { chromium, type Browser, type BrowserContext, type Page } from '@playwright/test';
+import {
+  chromium,
+  type Browser,
+  type BrowserContext,
+  type Page
+} from '@playwright/test';
 
 const VSCODE_VERSION = '1.115.0';
 
@@ -20,9 +25,15 @@ export interface VsCodeSession {
 export async function launchVsCodeWithFixtures(): Promise<VsCodeSession> {
   const rootDir = path.resolve(__dirname, '..', '..');
   const fixturesDir = path.join(rootDir, 'test', 'fixtures');
-  const workspacePath = fs.mkdtempSync(path.join(os.tmpdir(), 'kicadstudio-e2e-workspace-'));
-  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kicadstudio-e2e-user-'));
-  const extensionsDir = fs.mkdtempSync(path.join(os.tmpdir(), 'kicadstudio-e2e-ext-'));
+  const workspacePath = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'kicadstudio-e2e-workspace-')
+  );
+  const userDataDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'kicadstudio-e2e-user-')
+  );
+  const extensionsDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'kicadstudio-e2e-ext-')
+  );
   const logs: string[] = [];
   copyDirectory(fixturesDir, workspacePath);
   writeUserSettings(userDataDir);
@@ -39,6 +50,8 @@ export async function launchVsCodeWithFixtures(): Promise<VsCodeSession> {
       `--user-data-dir=${userDataDir}`,
       `--extensions-dir=${extensionsDir}`,
       `--extensionDevelopmentPath=${rootDir}`,
+      '--disable-workspace-trust',
+      '--skip-welcome',
       workspacePath
     ],
     {
@@ -48,17 +61,25 @@ export async function launchVsCodeWithFixtures(): Promise<VsCodeSession> {
     }
   );
 
-  child.stdout.on('data', (chunk) => logs.push(`[stdout] ${String(chunk).trim()}`));
-  child.stderr.on('data', (chunk) => logs.push(`[stderr] ${String(chunk).trim()}`));
+  child.stdout.on('data', (chunk) =>
+    logs.push(`[stdout] ${String(chunk).trim()}`)
+  );
+  child.stderr.on('data', (chunk) =>
+    logs.push(`[stderr] ${String(chunk).trim()}`)
+  );
 
   let browser: Browser | undefined;
   try {
     browser = await connectToVsCode(remoteDebuggingPort, logs);
     const context = browser.contexts()[0] ?? browser.contexts().at(0);
     if (!context) {
-      throw new Error(buildHarnessError('No VS Code browser context became available.', logs));
+      throw new Error(
+        buildHarnessError('No VS Code browser context became available.', logs)
+      );
     }
-    const page = context.pages()[0] ?? (await context.waitForEvent('page', { timeout: 30000 }));
+    const page =
+      context.pages()[0] ??
+      (await context.waitForEvent('page', { timeout: 30000 }));
     await page.waitForLoadState('domcontentloaded');
 
     return {
@@ -68,7 +89,11 @@ export async function launchVsCodeWithFixtures(): Promise<VsCodeSession> {
       logs,
       workspacePath,
       async close() {
-        await closeSession(browser, child, [workspacePath, userDataDir, extensionsDir]);
+        await closeSession(browser, child, [
+          workspacePath,
+          userDataDir,
+          extensionsDir
+        ]);
       }
     };
   } catch (error) {
@@ -114,7 +139,9 @@ async function closeSession(
   await cleanupDirectories(directories);
 }
 
-async function killProcess(child: ChildProcessWithoutNullStreams): Promise<void> {
+async function killProcess(
+  child: ChildProcessWithoutNullStreams
+): Promise<void> {
   if (child.killed || child.exitCode !== null) {
     return;
   }
@@ -141,8 +168,14 @@ async function removeDirectoryWithRetry(directory: string): Promise<void> {
       fs.rmSync(directory, { recursive: true, force: true });
       return;
     } catch (error) {
-      const code = error instanceof NodeJS.ErrnoException ? error.code : undefined;
-      if (attempt === 4 || (code !== 'EPERM' && code !== 'ENOTEMPTY' && code !== 'EBUSY')) {
+      const code =
+        error && typeof error === 'object' && 'code' in error
+          ? String((error as { code?: unknown }).code)
+          : undefined;
+      if (
+        attempt === 4 ||
+        (code !== 'EPERM' && code !== 'ENOTEMPTY' && code !== 'EBUSY')
+      ) {
         // Cleanup should not turn a passing smoke test into a failure on Windows.
         return;
       }

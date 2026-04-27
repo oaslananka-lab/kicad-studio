@@ -20,7 +20,12 @@ describe('McpDetector.generateMcpJson', () => {
     execFileMock = childProcess.execFile as unknown as jest.Mock;
     // Default: all commands fail
     execFileMock.mockImplementation(
-      (_command: string, _args: string[], _opts: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
+      (
+        _command: string,
+        _args: string[],
+        _opts: unknown,
+        callback: (err: Error | null, stdout: string, stderr: string) => void
+      ) => {
         callback(new Error('not found'), '', 'not found');
       }
     );
@@ -33,12 +38,16 @@ describe('McpDetector.generateMcpJson', () => {
   it('creates a stdio MCP configuration for uvx installs', async () => {
     const detector = new McpDetector();
 
-    await detector.generateMcpJson(tempDir, {
-      found: true,
-      command: 'uvx',
-      version: '0.5.0',
-      source: 'uvx'
-    }, 'analysis');
+    await detector.generateMcpJson(
+      tempDir,
+      {
+        found: true,
+        command: 'uvx',
+        version: '0.5.0',
+        source: 'uvx'
+      },
+      'analysis'
+    );
 
     const configPath = path.join(tempDir, '.vscode', 'mcp.json');
     const saved = JSON.parse(fs.readFileSync(configPath, 'utf8')) as {
@@ -105,7 +114,12 @@ describe('McpDetector.generateMcpJson', () => {
 
   it('prefers uvx during install detection when it is available', async () => {
     execFileMock.mockImplementation(
-      (command: string, _args: string[], _opts: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
+      (
+        command: string,
+        _args: string[],
+        _opts: unknown,
+        callback: (err: Error | null, stdout: string, stderr: string) => void
+      ) => {
         if (command === 'uvx') {
           callback(null, 'kicad-mcp-pro 0.8.0', '');
         } else {
@@ -126,7 +140,12 @@ describe('McpDetector.generateMcpJson', () => {
 
   it('falls back to a global binary and then pip metadata', async () => {
     execFileMock.mockImplementation(
-      (command: string, args: string[], _opts: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
+      (
+        command: string,
+        args: string[],
+        _opts: unknown,
+        callback: (err: Error | null, stdout: string, stderr: string) => void
+      ) => {
         if (command === 'kicad-mcp-pro') {
           callback(null, 'kicad-mcp-pro 0.9.1', '');
         } else {
@@ -143,7 +162,12 @@ describe('McpDetector.generateMcpJson', () => {
 
   it('uses pip metadata when no direct executable is available', async () => {
     execFileMock.mockImplementation(
-      (command: string, args: string[], _opts: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
+      (
+        command: string,
+        args: string[],
+        _opts: unknown,
+        callback: (err: Error | null, stdout: string, stderr: string) => void
+      ) => {
         if (command === 'pip' && Array.isArray(args) && args[0] === 'show') {
           callback(null, 'Name: kicad-mcp-pro\nVersion: 0.7.4\n', '');
         } else {
@@ -175,9 +199,18 @@ describe('McpDetector.generateMcpJson', () => {
 
   it('falls back to pipx metadata when uvx, global binary, and pip are unavailable', async () => {
     execFileMock.mockImplementation(
-      (command: string, _args: string[], _opts: unknown, callback: (err: Error | null, stdout: string, stderr: string) => void) => {
+      (
+        command: string,
+        _args: string[],
+        _opts: unknown,
+        callback: (err: Error | null, stdout: string, stderr: string) => void
+      ) => {
         if (command === 'pipx') {
-          callback(null, 'package kicad-mcp-pro 0.8.4, installed using Python 3.12.0', '');
+          callback(
+            null,
+            'package kicad-mcp-pro 0.8.4, installed using Python 3.12.0',
+            ''
+          );
         } else {
           callback(new Error('missing'), '', 'missing');
         }
@@ -192,5 +225,64 @@ describe('McpDetector.generateMcpJson', () => {
       version: '0.8.4',
       source: 'pip'
     });
+  });
+
+  it('detects a docker bootstrap fallback when Python installs are unavailable', async () => {
+    execFileMock.mockImplementation(
+      (
+        command: string,
+        args: string[],
+        _opts: unknown,
+        callback: (err: Error | null, stdout: string, stderr: string) => void
+      ) => {
+        if (
+          command === 'docker' &&
+          args[0] === 'image' &&
+          args[1] === 'inspect'
+        ) {
+          callback(null, '[{"RepoTags":["kicad-mcp-pro:latest"]}]', '');
+        } else {
+          callback(new Error('missing'), '', 'missing');
+        }
+      }
+    );
+
+    const result = await new McpDetector().detectKicadMcpPro();
+
+    expect(result).toEqual({
+      found: true,
+      command: 'docker',
+      source: 'docker'
+    });
+  });
+
+  it('detects MCP inspector availability as setup guidance', async () => {
+    execFileMock.mockImplementation(
+      (
+        command: string,
+        args: string[],
+        _opts: unknown,
+        callback: (err: Error | null, stdout: string, stderr: string) => void
+      ) => {
+        if (
+          command === 'npx' &&
+          args.includes('@modelcontextprotocol/inspector')
+        ) {
+          callback(null, 'mcp inspector 1.0.0', '');
+        } else {
+          callback(new Error('missing'), '', 'missing');
+        }
+      }
+    );
+
+    const result = await new McpDetector().detectKicadMcpPro();
+
+    expect(result).toEqual(
+      expect.objectContaining({
+        found: true,
+        command: 'npx',
+        source: 'inspector'
+      })
+    );
   });
 });

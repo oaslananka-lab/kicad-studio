@@ -15,7 +15,7 @@ function createMemento() {
   const store = new Map<string, unknown>();
   return {
     get: <T>(key: string, fallback?: T): T =>
-      (store.has(key) ? (store.get(key) as T) : (fallback as T)),
+      store.has(key) ? (store.get(key) as T) : (fallback as T),
     update: jest.fn(async (key: string, value: unknown) => {
       if (typeof value === 'undefined') {
         store.delete(key);
@@ -56,12 +56,15 @@ export const workspace = {
       }
     }
   ],
+  isTrusted: true,
   getConfiguration: () => ({
     get: <T>(key: string, fallback?: T): T =>
-      (Object.prototype.hasOwnProperty.call(configuration, key)
+      Object.prototype.hasOwnProperty.call(configuration, key)
         ? (configuration[key] as T)
-        : (fallback as T)),
-    inspect: <T>(key: string):
+        : (fallback as T),
+    inspect: <T>(
+      key: string
+    ):
       | {
           globalValue?: T;
           workspaceValue?: T;
@@ -82,6 +85,7 @@ export const workspace = {
   onDidOpenTextDocument: jest.fn(() => createDisposable()),
   onDidCloseTextDocument: jest.fn(() => createDisposable()),
   onDidChangeConfiguration: jest.fn(() => createDisposable()),
+  onDidGrantWorkspaceTrust: jest.fn(() => createDisposable()),
   getWorkspaceFolder: () => ({
     uri: {
       fsPath: process.cwd()
@@ -98,7 +102,9 @@ export const window = {
   showQuickPick: jest.fn(),
   showInputBox: jest.fn(),
   showTextDocument: jest.fn(),
-  withProgress: jest.fn(async (_options, task) => task({ report: jest.fn() }, { onCancellationRequested: jest.fn() })),
+  withProgress: jest.fn(async (_options, task) =>
+    task({ report: jest.fn() }, { onCancellationRequested: jest.fn() })
+  ),
   activeTextEditor: undefined,
   tabGroups: {
     activeTabGroup: {
@@ -137,11 +143,14 @@ export const window = {
     dispose: jest.fn()
   })),
   onDidChangeActiveTextEditor: jest.fn(() => createDisposable()),
+  onDidChangeTextEditorSelection: jest.fn(() => createDisposable()),
   onDidChangeActiveColorTheme: jest.fn(() => createDisposable())
 };
 
 export const languages = {
-  getDiagnostics: jest.fn((uri?: Uri) => (uri ? diagnosticStore.get(uri.toString()) ?? [] : [])),
+  getDiagnostics: jest.fn((uri?: Uri) =>
+    uri ? (diagnosticStore.get(uri.toString()) ?? []) : []
+  ),
   createDiagnosticCollection: jest.fn(() => ({
     set: jest.fn((uri: Uri, diagnostics: Diagnostic[]) => {
       diagnosticStore.set(uri.toString(), diagnostics);
@@ -154,7 +163,8 @@ export const languages = {
 };
 
 export const commands = {
-  executeCommand: jest.fn()
+  executeCommand: jest.fn(),
+  registerCommand: jest.fn(() => createDisposable())
 };
 
 export const lm = {

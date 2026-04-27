@@ -1,6 +1,11 @@
 import * as vscode from 'vscode';
 import { SETTINGS } from '../constants';
-import type { FixItem, McpInstallStatus, McpToolCall, StudioContext } from '../types';
+import type {
+  FixItem,
+  McpInstallStatus,
+  McpToolCall,
+  StudioContext
+} from '../types';
 import { Logger } from '../utils/logger';
 import { McpDetector } from './mcpDetector';
 
@@ -16,10 +21,23 @@ interface RpcTransportResult<T> {
   sessionId?: string | undefined;
 }
 
+export interface McpClientOptions {
+  maxRetries?: number | undefined;
+  retryBaseDelayMs?: number | undefined;
+}
+
 export interface McpConnectionState {
   available: boolean;
   connected: boolean;
   install?: McpInstallStatus | undefined;
+}
+
+const MCP_SESSION_ID_KEY = 'kicadstudio.mcp.sessionId';
+
+class McpHttpError extends Error {
+  constructor(readonly status: number) {
+    super(`HTTP ${status}`);
+  }
 }
 
 export class McpClient {
@@ -27,11 +45,19 @@ export class McpClient {
   private sessionId: string | undefined;
   private initializePromise: Promise<void> | undefined;
   private nextRpcId = 1;
+  private readonly maxRetries: number;
+  private readonly retryBaseDelayMs: number;
 
   constructor(
+    private readonly context: vscode.ExtensionContext,
     private readonly detector: McpDetector,
-    private readonly logger: Logger
-  ) {}
+    private readonly logger: Logger,
+    options: McpClientOptions = {}
+  ) {
+    this.sessionId = context.globalState.get<string>(MCP_SESSION_ID_KEY);
+    this.maxRetries = Math.max(1, options.maxRetries ?? 3);
+    this.retryBaseDelayMs = Math.max(1, options.retryBaseDelayMs ?? 200);
+  }
 
   async detectInstall(): Promise<McpInstallStatus> {
     this.lastInstall = await this.detector.detectKicadMcpPro();
@@ -69,7 +95,11 @@ export class McpClient {
   }
 
   async pushContext(context: StudioContext): Promise<void> {
-    if (!vscode.workspace.getConfiguration().get<boolean>(SETTINGS.mcpPushContext, true)) {
+    if (
+      !vscode.workspace
+        .getConfiguration()
+        .get<boolean>(SETTINGS.mcpPushContext, true)
+    ) {
       return;
     }
 
@@ -96,11 +126,16 @@ export class McpClient {
       arguments: args
     });
 
-    if (result?.structuredContent && typeof result.structuredContent === 'object') {
+    if (
+      result?.structuredContent &&
+      typeof result.structuredContent === 'object'
+    ) {
       return result.structuredContent;
     }
 
-    const firstText = result?.content?.find((item) => typeof item.text === 'string')?.text;
+    const firstText = result?.content?.find(
+      (item) => typeof item.text === 'string'
+    )?.text;
     if (firstText) {
       try {
         return JSON.parse(firstText) as Record<string, unknown>;
@@ -121,17 +156,24 @@ export class McpClient {
         arguments: toolCall.arguments
       })) ?? {};
     return String(
-      preview['preview'] ?? preview['text'] ?? toolCall.preview ?? 'Preview unavailable.'
+      preview['preview'] ??
+        preview['text'] ??
+        toolCall.preview ??
+        'Preview unavailable.'
     );
   }
 
-  async readResource(uri: string): Promise<Record<string, unknown> | undefined> {
+  async readResource(
+    uri: string
+  ): Promise<Record<string, unknown> | undefined> {
     const result = await this.rpc<{
       contents?: Array<{ text?: string }>;
     }>('resources/read', {
       uri
     });
-    const text = result?.contents?.find((item) => typeof item.text === 'string')?.text;
+    const text = result?.contents?.find(
+      (item) => typeof item.text === 'string'
+    )?.text;
     if (!text) {
       return undefined;
     }
@@ -154,8 +196,12 @@ export class McpClient {
 
     const toolResult = await this.callTool('project_get_fix_queue', {});
     const fixItems =
-      (Array.isArray(toolResult?.['items']) ? toolResult['items'] : undefined) ??
-      (Array.isArray(toolResult?.['fixes']) ? toolResult['fixes'] : undefined) ??
+      (Array.isArray(toolResult?.['items'])
+        ? toolResult['items']
+        : undefined) ??
+      (Array.isArray(toolResult?.['fixes'])
+        ? toolResult['fixes']
+        : undefined) ??
       [];
     return fixItems.map((item, index) => normalizeFixItem(item, index));
   }
@@ -167,14 +213,20 @@ export class McpClient {
       .replace(/\/$/, '');
   }
 
-  private async rpc<T>(method: string, params: Record<string, unknown>): Promise<T | undefined> {
+  private async rpc<T>(
+    method: string,
+    params: Record<string, unknown>
+  ): Promise<T | undefined> {
     if (method !== 'initialize') {
       await this.ensureInitialized();
     }
 
-    const { json, sessionId } = await this.postJsonRpc<T>(method, params);
+    const { json, sessionId } = await this.postJsonRpcWithRetry<T>(
+      method,
+      params
+    );
     if (sessionId) {
-      this.sessionId = sessionId;
+      await this.persistSessionId(sessionId);
     }
     if (json.error) {
       throw new Error(json.error.message ?? 'Unknown MCP error');
@@ -191,7 +243,7 @@ export class McpClient {
     }
 
     this.initializePromise = (async () => {
-      const { sessionId } = await this.postJsonRpc('initialize', {
+      const { sessionId } = await this.postJsonRpcWithRetry('initialize', {
         protocolVersion: '2024-11-05',
         clientInfo: {
           name: 'kicad-studio',
@@ -199,7 +251,9 @@ export class McpClient {
         },
         capabilities: {}
       });
-      this.sessionId = sessionId;
+      if (sessionId) {
+        await this.persistSessionId(sessionId);
+      }
     })();
 
     try {
@@ -238,7 +292,9 @@ export class McpClient {
         );
       }
 
-      this.logger.warn('Falling back to legacy MCP /sse transport because allowLegacySse is enabled.');
+      this.logger.warn(
+        'Falling back to legacy MCP /sse transport because allowLegacySse is enabled.'
+      );
       return this.readRpcResponse<T>(
         await fetch(`${baseEndpoint}/sse`, {
           method: 'POST',
@@ -251,6 +307,31 @@ export class McpClient {
     return this.readRpcResponse<T>(primaryResponse);
   }
 
+  private async postJsonRpcWithRetry<T>(
+    method: string,
+    params: Record<string, unknown>
+  ): Promise<RpcTransportResult<T>> {
+    let lastError: unknown;
+    for (let attempt = 0; attempt < this.maxRetries; attempt += 1) {
+      try {
+        return await this.postJsonRpc<T>(method, params);
+      } catch (error) {
+        lastError = error;
+        if (attempt === this.maxRetries - 1 || !isTransientMcpError(error)) {
+          throw error;
+        }
+        await sleep(this.retryBaseDelayMs * 2 ** attempt);
+      }
+    }
+
+    throw lastError instanceof Error ? lastError : new Error(String(lastError));
+  }
+
+  private async persistSessionId(sessionId: string): Promise<void> {
+    this.sessionId = sessionId;
+    await this.context.globalState.update(MCP_SESSION_ID_KEY, sessionId);
+  }
+
   private buildHeaders(): Record<string, string> {
     return {
       'Content-Type': 'application/json',
@@ -259,9 +340,11 @@ export class McpClient {
     };
   }
 
-  private async readRpcResponse<T>(response: Response): Promise<RpcTransportResult<T>> {
+  private async readRpcResponse<T>(
+    response: Response
+  ): Promise<RpcTransportResult<T>> {
     if (!response.ok) {
-      throw new Error(`HTTP ${response.status}`);
+      throw new McpHttpError(response.status);
     }
 
     const sessionId = response.headers.get('MCP-Session-Id') ?? undefined;
@@ -280,12 +363,28 @@ export class McpClient {
   }
 }
 
+function isTransientMcpError(error: unknown): boolean {
+  if (error instanceof McpHttpError) {
+    return error.status === 408 || error.status === 429 || error.status >= 500;
+  }
+  return (
+    error instanceof TypeError ||
+    /(?:ECONNRESET|ETIMEDOUT|EAI_AGAIN|network|fetch)/i.test(String(error))
+  );
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
 function normalizeFixItem(value: unknown, index: number): FixItem {
   const item = typeof value === 'object' && value !== null ? value : {};
   const record = item as Record<string, unknown>;
   return {
     id: String(record['id'] ?? `fix-${index + 1}`),
-    description: String(record['description'] ?? record['title'] ?? `Suggested fix ${index + 1}`),
+    description: String(
+      record['description'] ?? record['title'] ?? `Suggested fix ${index + 1}`
+    ),
     severity:
       record['severity'] === 'error' ||
       record['severity'] === 'warning' ||
@@ -304,7 +403,9 @@ function normalizeFixItem(value: unknown, index: number): FixItem {
       record['status'] === 'failed'
         ? record['status']
         : 'pending',
-    ...(typeof record['preview'] === 'string' ? { preview: record['preview'] } : {})
+    ...(typeof record['preview'] === 'string'
+      ? { preview: record['preview'] }
+      : {})
   };
 }
 

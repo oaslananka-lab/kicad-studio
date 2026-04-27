@@ -141,6 +141,7 @@ kicanvas-embed {
 
 .diff-canvas-mount {
   display: grid;
+  position: relative;
   min-height: 0;
   overflow: hidden;
 }
@@ -158,6 +159,28 @@ kicanvas-embed {
   color: var(--muted);
   background: var(--bg);
   text-align: center;
+}
+
+.diff-component-overlays {
+  position: absolute;
+  inset: 12px;
+  pointer-events: none;
+  display: flex;
+  flex-wrap: wrap;
+  align-content: flex-start;
+  gap: 6px;
+}
+
+.diff-component-overlay {
+  pointer-events: auto;
+  border: 1px solid color-mix(in srgb, var(--accent) 55%, transparent);
+  background: color-mix(in srgb, var(--panel) 86%, transparent);
+  color: var(--text);
+  border-radius: 4px;
+  padding: 3px 7px;
+  font: inherit;
+  font-size: 11px;
+  cursor: pointer;
 }
 
 #error-overlay[hidden] {

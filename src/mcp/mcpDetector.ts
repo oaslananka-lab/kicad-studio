@@ -10,17 +10,25 @@ function runExecFile(
   timeoutMs: number
 ): Promise<{ stdout: string; stderr: string }> {
   return new Promise((resolve, reject) => {
-    execFile(command, args, { encoding: 'utf8', timeout: timeoutMs }, (error, stdout, stderr) => {
-      if (error) {
-        reject(error);
-      } else {
-        resolve({ stdout: stdout ?? '', stderr: stderr ?? '' });
+    execFile(
+      command,
+      args,
+      { encoding: 'utf8', timeout: timeoutMs },
+      (error, stdout, stderr) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve({ stdout: stdout ?? '', stderr: stderr ?? '' });
+        }
       }
-    });
+    );
   });
 }
 
-async function run(command: string, args: string[]): Promise<{ ok: boolean; output: string }> {
+async function run(
+  command: string,
+  args: string[]
+): Promise<{ ok: boolean; output: string }> {
   try {
     const { stdout, stderr } = await runExecFile(command, args, 8_000);
     const output = `${stdout}\n${stderr}`.trim();
@@ -73,6 +81,25 @@ export class McpDetector {
       };
     }
 
+    const dockerResult = await this.tryDocker();
+    if (dockerResult.found) {
+      return {
+        found: true,
+        command: 'docker',
+        source: 'docker'
+      };
+    }
+
+    const inspectorResult = await this.tryInspector();
+    if (inspectorResult.found) {
+      return {
+        found: true,
+        command: 'npx',
+        version: inspectorResult.version,
+        source: 'inspector'
+      };
+    }
+
     return {
       found: false,
       source: 'none'
@@ -84,7 +111,8 @@ export class McpDetector {
     status: McpInstallStatus,
     profile = 'full'
   ): Promise<void> {
-    const root = vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? projectDir;
+    const root =
+      vscode.workspace.workspaceFolders?.[0]?.uri.fsPath ?? projectDir;
     const mcpJsonPath = path.join(root, '.vscode', 'mcp.json');
 
     if (fs.existsSync(mcpJsonPath)) {
@@ -98,8 +126,22 @@ export class McpDetector {
       }
     }
 
-    const command = status.command === 'uvx' ? 'uvx' : 'kicad-mcp-pro';
-    const args = status.command === 'uvx' ? ['kicad-mcp-pro'] : [];
+    const command =
+      status.command === 'uvx'
+        ? 'uvx'
+        : status.command === 'docker'
+          ? 'docker'
+          : status.command === 'npx'
+            ? 'npx'
+            : 'kicad-mcp-pro';
+    const args =
+      status.command === 'uvx'
+        ? ['kicad-mcp-pro']
+        : status.command === 'docker'
+          ? ['run', '--rm', '-i', 'kicad-mcp-pro:latest']
+          : status.command === 'npx'
+            ? ['@modelcontextprotocol/inspector', 'kicad-mcp-pro']
+            : [];
     const config = {
       servers: {
         kicad: {
@@ -148,10 +190,9 @@ export class McpDetector {
 
   private async tryPip(): Promise<{ found: boolean; version?: string }> {
     for (const command of ['pip', 'pip3', 'python', 'python3']) {
-      const args =
-        command.startsWith('python')
-          ? ['-m', 'pip', 'show', 'kicad-mcp-pro']
-          : ['show', 'kicad-mcp-pro'];
+      const args = command.startsWith('python')
+        ? ['-m', 'pip', 'show', 'kicad-mcp-pro']
+        : ['show', 'kicad-mcp-pro'];
       const result = await run(command, args);
       if (!result.ok) {
         continue;
@@ -174,7 +215,34 @@ export class McpDetector {
       return { found: false };
     }
 
-    const version = result.output.match(/kicad-mcp-pro[^0-9]*(\d+\.\d+(?:\.\d+)?)/i)?.[1];
+    const version = result.output.match(
+      /kicad-mcp-pro[^0-9]*(\d+\.\d+(?:\.\d+)?)/i
+    )?.[1];
+    return {
+      found: true,
+      ...(version ? { version } : {})
+    };
+  }
+
+  private async tryDocker(): Promise<{ found: boolean }> {
+    const result = await run('docker', [
+      'image',
+      'inspect',
+      'kicad-mcp-pro:latest'
+    ]);
+    return { found: result.ok };
+  }
+
+  private async tryInspector(): Promise<{ found: boolean; version?: string }> {
+    const result = await run('npx', [
+      '--yes',
+      '@modelcontextprotocol/inspector',
+      '--version'
+    ]);
+    if (!result.ok) {
+      return { found: false };
+    }
+    const version = extractVersion(result.output);
     return {
       found: true,
       ...(version ? { version } : {})

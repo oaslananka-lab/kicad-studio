@@ -22,6 +22,9 @@ export interface CliResult<T = unknown> {
   exitCode: number;
   durationMs: number;
   parsed?: T | undefined;
+  stdoutTruncated?: boolean | undefined;
+  stderrTruncated?: boolean | undefined;
+  truncatedOutputBytes?: number | undefined;
 }
 
 export interface DetectedKiCadCli {
@@ -93,6 +96,7 @@ export interface TuningProfile {
 export interface ViewerMetadata {
   layers?: ViewerLayerInfo[] | undefined;
   tuningProfiles?: TuningProfile[] | undefined;
+  hopOvers?: Array<{ x: number; y: number }> | undefined;
   notes?: string[] | undefined;
 }
 
@@ -115,7 +119,13 @@ export interface BomSummary {
 }
 
 export interface BomWebviewMessage {
-  type: 'setData' | 'setStatus' | 'highlight' | 'exportCsv' | 'exportXlsx' | 'rowSelected';
+  type:
+    | 'setData'
+    | 'setStatus'
+    | 'highlight'
+    | 'exportCsv'
+    | 'exportXlsx'
+    | 'rowSelected';
   payload?: Record<string, unknown>;
 }
 
@@ -145,7 +155,7 @@ export interface ComponentOffer {
 }
 
 export interface ComponentSearchResult {
-  source: 'octopart' | 'lcsc';
+  source: 'octopart' | 'lcsc' | 'local';
   mpn: string;
   manufacturer: string;
   description: string;
@@ -174,6 +184,7 @@ export interface DiffWebviewMessage {
 }
 
 export interface ExportPreset {
+  schemaVersion?: number | undefined;
   name: string;
   description?: string | undefined;
   commands: string[];
@@ -219,7 +230,11 @@ export interface ProjectTreeNode {
 
 export interface AIProvider {
   name: string;
-  analyze(prompt: string, context: string, systemPrompt?: string): Promise<string>;
+  analyze(
+    prompt: string,
+    context: string,
+    systemPrompt?: string
+  ): Promise<string>;
   analyzeStream?(
     prompt: string,
     context: string,
@@ -266,9 +281,16 @@ export interface KiCadVariant {
 
 export interface McpInstallStatus {
   found: boolean;
-  command?: 'uvx' | 'kicad-mcp-pro' | undefined;
+  command?: 'uvx' | 'kicad-mcp-pro' | 'docker' | 'npx' | undefined;
   version?: string | undefined;
-  source?: 'uvx' | 'global' | 'pip' | 'none' | undefined;
+  source?:
+    | 'uvx'
+    | 'global'
+    | 'pip'
+    | 'docker'
+    | 'inspector'
+    | 'none'
+    | undefined;
 }
 
 export interface StudioContext {
@@ -284,7 +306,7 @@ export interface StudioContext {
         x2: number;
         y2: number;
       }
-      | undefined;
+    | undefined;
   activeVariant?: string | undefined;
   mcpConnected?: boolean | undefined;
   cursorPosition?:
