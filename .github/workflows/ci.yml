@@ -56,5 +56,9 @@ jobs:
         env:
           DOPPLER_TOKEN: ${{ secrets.DOPPLER_TOKEN }}
         run: |
-          doppler run --project all --config main -- npx codecov --file ./coverage/lcov.info
+          doppler run --project all --config main -- bash -euo pipefail -c '
+            curl -Os https://uploader.codecov.io/latest/linux/codecov
+            chmod +x codecov
+            ./codecov -f coverage/lcov.info -t "$CODECOV_TOKEN"
+          '
         shell: bash
