@@ -19,33 +19,43 @@ jobs:
     if: github.repository == 'oaslananka-lab/kicad-studio'
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    permissions:
+      contents: write
     steps:
       - name: Checkout org mirror
         uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
         with:
           fetch-depth: 0
-          token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
+          token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN || github.token }}
 
       - name: Pull from canonical and replay
-        env:
-          MIRROR_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
         run: |
           set -euo pipefail
           git config user.name  "oaslananka-lab[bot]"
           git config user.email "oaslananka-lab@users.noreply.github.com"
 
-          git remote add canonical "https://x-access-token:${MIRROR_TOKEN}@github.com/oaslananka/kicad-studio.git"
+          git remote add canonical "https://github.com/oaslananka/kicad-studio.git"
           git fetch canonical --prune --tags
 
           # Replay every canonical branch into the org mirror
           for ref in $(git for-each-ref --format='%(refname:short)' refs/remotes/canonical | sed 's|^canonical/||'); do
             [ "$ref" = "HEAD" ] && continue
-            # Force-push canonical branch state to org mirror
-            git push origin "refs/remotes/canonical/${ref}:refs/heads/${ref}" --force
+            if git show-ref --verify --quiet "refs/remotes/origin/${ref}"; then
+              local_sha="$(git rev-parse "refs/remotes/origin/${ref}")"
+            else
+              local_sha=""
+            fi
+            canonical_sha="$(git rev-parse "refs/remotes/canonical/${ref}")"
+            if [ "$local_sha" = "$canonical_sha" ]; then
+              echo "Branch ${ref} already matches canonical."
+              continue
+            fi
+            # Push canonical branch state to org mirror; fail if branch protection blocks it.
+            git push origin "refs/remotes/canonical/${ref}:refs/heads/${ref}"
           done
 
           # Replay tags
-          git push origin --tags --force
+          git push origin --tags
 
           # Prune branches that no longer exist on canonical
           for org_branch in $(git for-each-ref --format='%(refname:short)' refs/remotes/origin); do
