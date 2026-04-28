@@ -13,3 +13,5 @@ fab/
 .vscode/mcp.json
 TEMP_FOLDER/
 .vscode/settings.json
+# KiCad auto-generated project layout files
+*.kicad_prl
