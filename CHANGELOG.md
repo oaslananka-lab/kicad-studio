@@ -1,5 +1,14 @@
 # Changelog
 
+## [2.7.1] - 2026-04-28
+
+### Security
+
+- Resolved CodeQL code-scanning findings in bundled viewer scripts and the library symbol preview path by removing unsafe HTML injection patterns.
+- Hardened SVG/script checks used by tests and added property-based fuzz coverage for parser robustness and API-key redaction.
+- Pinned GitHub Actions to full commit SHAs, refreshed Node 24-compatible action pins, and removed the Node-based Task setup action from CI and release workflows.
+- Repaired canonical mirror sync so it falls back to `GITHUB_TOKEN`, avoids forced pushes, skips already-synced branches, and passes manual verification.
+
 ## [2.7.0] - 2026-04-28
 
 ### Changed
