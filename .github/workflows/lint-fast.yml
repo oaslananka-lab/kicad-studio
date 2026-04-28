@@ -29,14 +29,20 @@ jobs:
           yamllint -d "{extends: relaxed, rules: {line-length: disable}}" .github/ || true
 
   node:
-    if: github.repository == 'oaslananka-lab/kicad-studio' && hashFiles('package.json') != ''
+    if: github.repository == 'oaslananka-lab/kicad-studio'
     runs-on: ubuntu-latest
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@v4
+      - name: Check Node project
+        id: node-project
+        run: test -f package.json && echo "present=true" >> "$GITHUB_OUTPUT" || true
       - uses: actions/setup-node@v4
+        if: steps.node-project.outputs.present == 'true'
         with:
           node-version-file: package.json
-      - run: npm install --frozen-lockfile || npm install
+      - if: steps.node-project.outputs.present == 'true'
+        run: npm install --frozen-lockfile || npm install
       - name: Lint
+        if: steps.node-project.outputs.present == 'true'
         run: npm run lint
