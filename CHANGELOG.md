@@ -1,5 +1,23 @@
 # Changelog
 
+## [2.7.3] - 2026-04-29
+
+### Fixed
+
+- **Chat auto-scroll**: replaced per-chunk `scrollTop = scrollHeight` (layout thrashing)
+  with a `requestAnimationFrame`-batched helper; multiple chunks within the same frame
+  now trigger a single layout pass. Scroll is skipped when the user has scrolled more than
+  120 px above the bottom so reading history during streaming is preserved.
+- **Codex missing from Settings panel**: `settingsHtml.ts` and the `kicadstudio.ai.provider`
+  enum in `package.json` were missing the `codex` option added in 2.7.2; the Settings UI
+  now shows "Codex (VS Code)" alongside the other providers.
+- **MCP stdio — raw fetch crash in Quality Gates / AI Fix Queue**: when kicad-mcp-pro is
+  connected via VS Code stdio the extension's HTTP client cannot reach port 27185, producing
+  unhandled "fetch failed" toasts from `qualityGate.runAll` and `refreshFixQueue`. The
+  `rpc()` layer now throws a descriptive error on `VsCodeStdio` state; `fixQueueProvider`
+  swallows stdio/fetch/ECONNREFUSED errors silently; `qualityGateProvider` shows an
+  informational message explaining that HTTP transport is required for Quality Gates.
+
 ## [2.7.2] - 2026-04-29
 
 ### Fixed
