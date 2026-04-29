@@ -1,14 +1,19 @@
 import { McpClient } from '../../src/mcp/mcpClient';
 import { __setConfiguration, createExtensionContextMock } from './vscodeMock';
 
-// Prevent the VsCodeStdio fallback from reading the real .vscode/mcp.json on
-// disk (which exists in this workspace). Tests that need filesystem-based MCP
-// detection should un-mock and set up their own fs stubs.
+// Mock node:fs so the VsCodeStdio fallback cannot read the real .vscode/mcp.json
+// that exists in this workspace. Individual tests override existsSync/readFileSync
+// to exercise the stdio-detection path with controlled data.
 jest.mock('node:fs', () => ({
   ...jest.requireActual<typeof import('node:fs')>('node:fs'),
   existsSync: jest.fn().mockReturnValue(false),
   readFileSync: jest.fn().mockReturnValue('{}')
 }));
+// eslint-disable-next-line @typescript-eslint/no-require-imports
+const mockedFs = require('node:fs') as {
+  existsSync: jest.MockedFunction<typeof import('node:fs').existsSync>;
+  readFileSync: jest.MockedFunction<typeof import('node:fs').readFileSync>;
+};
 
 function createJsonResponse(
   body: unknown,
@@ -68,6 +73,9 @@ describe('McpClient', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    // Reset mocked fs helpers to safe defaults before each test.
+    mockedFs.existsSync.mockReturnValue(false as unknown as boolean);
+    mockedFs.readFileSync.mockReturnValue('{}' as unknown as Buffer);
     __setConfiguration({
       'kicadstudio.mcp.endpoint': 'http://127.0.0.1:27185',
       'kicadstudio.mcp.pushContext': true,
@@ -537,5 +545,62 @@ describe('McpClient', () => {
       }).callTool('project_ping', {})
     ).resolves.toEqual({ ok: true });
     expect(fetchMock).toHaveBeenCalledTimes(4);
+  });
+
+  it('reports VsCodeStdio state when HTTP fails but .vscode/mcp.json has kicad-mcp-pro (command field)', async () => {
+    mockedFs.existsSync.mockReturnValue(true as unknown as boolean);
+    mockedFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        servers: {
+          kicad: { command: 'kicad-mcp-pro', args: [], type: 'stdio' }
+        }
+      }) as unknown as Buffer
+    );
+
+    global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const client = createClient();
+    const state = await client.testConnection();
+
+    expect(state.kind).toBe('VsCodeStdio');
+    expect(state.connected).toBe(true);
+    expect(state.available).toBe(true);
+  });
+
+  it('reports VsCodeStdio state when kicad-mcp-pro appears in args (not command)', async () => {
+    mockedFs.existsSync.mockReturnValue(true as unknown as boolean);
+    mockedFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        servers: {
+          kicad: { command: 'uvx', args: ['kicad-mcp-pro'], type: 'stdio' }
+        }
+      }) as unknown as Buffer
+    );
+
+    global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const client = createClient();
+    const state = await client.testConnection();
+
+    expect(state.kind).toBe('VsCodeStdio');
+    expect(state.connected).toBe(true);
+  });
+
+  it('stays Disconnected when .vscode/mcp.json exists but has no kicad-mcp-pro server', async () => {
+    mockedFs.existsSync.mockReturnValue(true as unknown as boolean);
+    mockedFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        servers: {
+          other: { command: 'some-other-tool', args: [], type: 'stdio' }
+        }
+      }) as unknown as Buffer
+    );
+
+    global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const client = createClient();
+    const state = await client.testConnection();
+
+    expect(state.connected).toBe(false);
   });
 });
