@@ -603,4 +603,21 @@ describe('McpClient', () => {
 
     expect(state.connected).toBe(false);
   });
+
+  it('throws a friendly error when callTool is called while in VsCodeStdio state', async () => {
+    mockedFs.existsSync.mockReturnValue(true as unknown as boolean);
+    mockedFs.readFileSync.mockReturnValue(
+      JSON.stringify({
+        servers: { kicad: { command: 'kicad-mcp-pro', args: [] } }
+      }) as unknown as Buffer
+    );
+    global.fetch = jest.fn().mockRejectedValue(new Error('ECONNREFUSED'));
+
+    const client = createClient();
+    await client.testConnection(); // puts client into VsCodeStdio state
+
+    await expect(client.callTool('some_tool', {})).rejects.toThrow(
+      'kicad-mcp-pro is connected via VS Code stdio'
+    );
+  });
 });

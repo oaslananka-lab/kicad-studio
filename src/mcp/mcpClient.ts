@@ -346,6 +346,15 @@ export class McpClient {
     params: Record<string, unknown>
   ): Promise<T | undefined> {
     if (method !== 'initialize') {
+      // kicad-mcp-pro is connected via VS Code stdio (.vscode/mcp.json).
+      // The extension's HTTP client cannot reach it — tool calls are routed
+      // through VS Code's native MCP infrastructure, not our HTTP layer.
+      if (this.state.kind === 'VsCodeStdio') {
+        throw new Error(
+          'kicad-mcp-pro is connected via VS Code stdio. ' +
+            'Use the AI chat with MCP tools enabled, or Claude Code / Cursor instead.'
+        );
+      }
       await this.ensureInitialized();
       if (this.state.kind === 'Incompatible') {
         throw new Error(

@@ -111,14 +111,26 @@ export class QualityGateProvider
   }
 
   async runAll(): Promise<void> {
-    const [project, placement, transfer, manufacturing] = await Promise.all([
-      this.mcpClient.runProjectQualityGate(),
-      this.mcpClient.runPlacementQualityGate(),
-      this.mcpClient.runTransferQualityGate(),
-      this.mcpClient.runManufacturingQualityGate()
-    ]);
-    this.gates = mergeGates([...project, placement, transfer, manufacturing]);
-    await this.persist();
+    try {
+      const [project, placement, transfer, manufacturing] = await Promise.all([
+        this.mcpClient.runProjectQualityGate(),
+        this.mcpClient.runPlacementQualityGate(),
+        this.mcpClient.runTransferQualityGate(),
+        this.mcpClient.runManufacturingQualityGate()
+      ]);
+      this.gates = mergeGates([...project, placement, transfer, manufacturing]);
+      await this.persist();
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (msg.includes('stdio')) {
+        void vscode.window.showInformationMessage(
+          'Quality Gates are not available when kicad-mcp-pro is connected via VS Code stdio. ' +
+            'Start kicad-mcp-pro with the HTTP transport (port 27185) to enable this feature.'
+        );
+        return;
+      }
+      throw err;
+    }
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 

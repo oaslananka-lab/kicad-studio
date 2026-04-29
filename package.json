@@ -1138,7 +1138,8 @@
             "claude",
             "openai",
             "copilot",
-            "gemini"
+            "gemini",
+            "codex"
           ],
           "description": "AI provider for circuit analysis and error explanation."
         },

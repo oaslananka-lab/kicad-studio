@@ -59,7 +59,22 @@ export class FixQueueProvider implements vscode.TreeDataProvider<FixItem> {
   }
 
   async refresh(): Promise<void> {
-    this.items = await this.mcpClient.fetchFixQueue();
+    try {
+      this.items = await this.mcpClient.fetchFixQueue();
+    } catch (err) {
+      // Swallow errors when MCP is connected via VS Code stdio (HTTP not
+      // available) or when the server is temporarily unreachable, so the
+      // tree view degrades gracefully instead of surfacing a raw error toast.
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        !msg.includes('stdio') &&
+        !msg.includes('fetch') &&
+        !msg.includes('ECONNREFUSED')
+      ) {
+        throw err;
+      }
+      this.items = [];
+    }
     this.onDidChangeTreeDataEmitter.fire(undefined);
   }
 

@@ -332,7 +332,7 @@ export function buildChatHtml(options: ChatHtmlOptions): string {
   <script nonce="${nonce}" src="${markdownUri}"></script>
   <script nonce="${nonce}">
     const vscode = acquireVsCodeApi();
-    const state = { history: [], busy: false, contextVisible: false };
+    const state = { history: [], busy: false, contextVisible: false, scrollPending: false };
     const nodes = {
       messages: document.getElementById('messages'),
       empty: document.getElementById('empty'),
@@ -385,6 +385,27 @@ export function buildChatHtml(options: ChatHtmlOptions): string {
       for (const item of [...nodes.messages.querySelectorAll('.message')]) {
         item.remove();
       }
+    }
+    /**
+     * Scroll the message list to the bottom using requestAnimationFrame so
+     * multiple calls within the same event loop tick are coalesced into a
+     * single layout pass. Only scrolls when the user is already near the
+     * bottom (within 120 px) so manual scroll-up to read history is
+     * preserved during streaming.
+     */
+    function scheduleScrollToBottom() {
+      if (state.scrollPending) {
+        return;
+      }
+      state.scrollPending = true;
+      requestAnimationFrame(() => {
+        state.scrollPending = false;
+        const el = nodes.messages;
+        const nearBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 120;
+        if (nearBottom || state.busy) {
+          el.scrollTop = el.scrollHeight;
+        }
+      });
     }
     function actionButton(label, title, onClick) {
       const button = document.createElement('button');
@@ -500,7 +521,7 @@ export function buildChatHtml(options: ChatHtmlOptions): string {
         renderTools(article, message);
       }
       nodes.empty.style.display = nodes.messages.querySelector('.message') ? 'none' : 'block';
-      nodes.messages.scrollTop = nodes.messages.scrollHeight;
+      scheduleScrollToBottom();
     }
 
     /**
@@ -525,7 +546,7 @@ export function buildChatHtml(options: ChatHtmlOptions): string {
         body.appendChild(pre);
       }
       pre.textContent = content;
-      nodes.messages.scrollTop = nodes.messages.scrollHeight;
+      scheduleScrollToBottom();
     }
     function exportTranscript() {
       const lines = state.history.map((message) => {

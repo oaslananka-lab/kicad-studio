@@ -209,6 +209,7 @@ export function buildSettingsHtml(options: SettingsHtmlOptions): string {
             <option value="openai">OpenAI</option>
             <option value="copilot">GitHub Copilot</option>
             <option value="gemini">Gemini</option>
+            <option value="codex">Codex (VS Code)</option>
           </select>
         </div>
         <div class="field">

@@ -110,4 +110,33 @@ describe('FixQueueProvider code-action support', () => {
     expect(client.callTool).toHaveBeenCalledTimes(1);
     expect(first?.status).toBe('failed');
   });
+
+  it('refresh swallows stdio/fetch/ECONNREFUSED errors and leaves items empty', async () => {
+    const client = {
+      fetchFixQueue: jest
+        .fn()
+        .mockRejectedValueOnce(
+          new Error('kicad-mcp-pro is connected via VS Code stdio')
+        )
+        .mockRejectedValueOnce(new Error('fetch failed'))
+        .mockRejectedValueOnce(new Error('ECONNREFUSED'))
+    };
+    const provider = new FixQueueProvider(client as never);
+
+    // All three should resolve without throwing.
+    await expect(provider.refresh()).resolves.toBeUndefined();
+    await expect(provider.refresh()).resolves.toBeUndefined();
+    await expect(provider.refresh()).resolves.toBeUndefined();
+    expect(provider.getChildren()).toHaveLength(0);
+  });
+
+  it('refresh re-throws errors unrelated to stdio/fetch', async () => {
+    const client = {
+      fetchFixQueue: jest
+        .fn()
+        .mockRejectedValue(new Error('unexpected server crash'))
+    };
+    const provider = new FixQueueProvider(client as never);
+    await expect(provider.refresh()).rejects.toThrow('unexpected server crash');
+  });
 });
