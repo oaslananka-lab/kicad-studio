@@ -1,11 +1,10 @@
 # daily-health.ps1
-# Runs the repo-steward daily health checks and writes a timestamped report.
+# Runs repo-steward daily checks and writes a timestamped report.
 #
-# Usage:
+# Example:
 #   pwsh -ExecutionPolicy Bypass -File .\scripts\daily-health.ps1
-#   pwsh -ExecutionPolicy Bypass -File .\scripts\daily-health.ps1 -ShowDetails
 #
-# This script is read-only. It does not change repository settings.
+# Read-only.
 
 param(
     [string]$Org = "oaslananka-lab",
@@ -21,40 +20,34 @@ New-Item -ItemType Directory -Force -Path $ReportsDir | Out-Null
 $Timestamp = Get-Date -Format "yyyyMMdd-HHmmss"
 $OutFile = Join-Path $ReportsDir "daily-health-$Timestamp.txt"
 
-function Write-Section {
-    param([string]$Title)
+function Add-Line {
+    param([string]$Text)
+    $Text | Tee-Object -FilePath $OutFile -Append
+}
 
-    $line = ""
-    $line += "`n"
-    $line += "================================================================================`n"
-    $line += "$Title`n"
-    $line += "================================================================================`n"
-    $line | Tee-Object -FilePath $OutFile -Append
+function Add-Section {
+    param([string]$Title)
+    Add-Line ""
+    Add-Line "================================================================================"
+    Add-Line $Title
+    Add-Line "================================================================================"
 }
 
 function Run-And-Capture {
-    param(
-        [string]$Title,
-        [scriptblock]$Command
-    )
-
-    Write-Section $Title
+    param([string]$Title, [scriptblock]$Command)
+    Add-Section $Title
     & $Command 2>&1 | Tee-Object -FilePath $OutFile -Append
 }
 
 "Daily health report: $Timestamp" | Set-Content -Encoding UTF8 $OutFile
-"Organization: $Org" | Tee-Object -FilePath $OutFile -Append
-"Root: $Root" | Tee-Object -FilePath $OutFile -Append
+Add-Line "Organization: $Org"
+Add-Line "Root: $Root"
 
-Run-And-Capture "1. Steward status" {
-    pwsh -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "steward-status.ps1")
-}
-
-Run-And-Capture "2. PR triage" {
+Run-And-Capture "1. PR triage" {
     pwsh -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "steward-pr-triage.ps1") -All
 }
 
-Run-And-Capture "3. Capability audit" {
+Run-And-Capture "2. Capability audit" {
     if ($ShowDetails) {
         pwsh -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "capability-audit.ps1") -All -ShowDetails
     } else {
@@ -62,13 +55,21 @@ Run-And-Capture "3. Capability audit" {
     }
 }
 
-Write-Section "4. Summary"
+Run-And-Capture "3. App audit" {
+    pwsh -ExecutionPolicy Bypass -File (Join-Path $PSScriptRoot "app-audit.ps1")
+}
+
+Add-Section "4. Summary"
 
 $LatestCapability = Get-ChildItem $ReportsDir -Filter "capability-audit-*.json" |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 
 $LatestTriage = Get-ChildItem $ReportsDir -Filter "pr-triage-*.json" |
+    Sort-Object LastWriteTime -Descending |
+    Select-Object -First 1
+
+$LatestAppAudit = Get-ChildItem $ReportsDir -Filter "app-audit-*.json" |
     Sort-Object LastWriteTime -Descending |
     Select-Object -First 1
 
@@ -83,48 +84,54 @@ if ($LatestCapability) {
     $reposWithSecretScanningDisabled = @($cap | Where-Object { $_.visibility -eq "public" -and $_.secretScanning.status -eq "disabled" })
     $reposWithMissingLabels = @($cap | Where-Object { $_.missingLabels -and $_.missingLabels.Count -gt 0 })
 
-    "Latest capability report: $($LatestCapability.Name)" | Tee-Object -FilePath $OutFile -Append
-    "Repos with open PRs: $($reposWithOpenPrs.Count)" | Tee-Object -FilePath $OutFile -Append
-    "Repos with active failed runs: $($reposWithActiveFailures.Count)" | Tee-Object -FilePath $OutFile -Append
-    "Public repos without CodeQL/code scanning analysis: $($reposWithoutCodeScanning.Count)" | Tee-Object -FilePath $OutFile -Append
-    "Repos with CodeQL/code scanning alerts: $($reposWithCodeAlerts.Count)" | Tee-Object -FilePath $OutFile -Append
-    "Repos with Dependabot alerts: $($reposWithDependabotAlerts.Count)" | Tee-Object -FilePath $OutFile -Append
-    "Public repos with secret scanning disabled: $($reposWithSecretScanningDisabled.Count)" | Tee-Object -FilePath $OutFile -Append
-    "Repos with missing standard labels: $($reposWithMissingLabels.Count)" | Tee-Object -FilePath $OutFile -Append
+    Add-Line "Latest capability report: $($LatestCapability.Name)"
+    Add-Line "Repos with open PRs: $($reposWithOpenPrs.Count)"
+    Add-Line "Repos with active failed runs: $($reposWithActiveFailures.Count)"
+    Add-Line "Public repos without CodeQL/code scanning analysis: $($reposWithoutCodeScanning.Count)"
+    Add-Line "Repos with CodeQL/code scanning alerts: $($reposWithCodeAlerts.Count)"
+    Add-Line "Repos with Dependabot alerts: $($reposWithDependabotAlerts.Count)"
+    Add-Line "Public repos with secret scanning disabled: $($reposWithSecretScanningDisabled.Count)"
+    Add-Line "Repos with missing standard labels: $($reposWithMissingLabels.Count)"
 
     if ($reposWithOpenPrs.Count -gt 0) {
-        "`nOpen PR follow-ups:" | Tee-Object -FilePath $OutFile -Append
-        foreach ($r in $reposWithOpenPrs) {
-            "- $($r.repo): openPrs=$($r.openPrs)" | Tee-Object -FilePath $OutFile -Append
-        }
+        Add-Line ""
+        Add-Line "Open PR follow-ups:"
+        foreach ($r in $reposWithOpenPrs) { Add-Line "- $($r.repo): openPrs=$($r.openPrs)" }
     }
 
     if ($reposWithActiveFailures.Count -gt 0) {
-        "`nActive failed run follow-ups:" | Tee-Object -FilePath $OutFile -Append
-        foreach ($r in $reposWithActiveFailures) {
-            "- $($r.repo): activeFailedRuns=$($r.activeFailedRuns)" | Tee-Object -FilePath $OutFile -Append
-        }
+        Add-Line ""
+        Add-Line "Active failed run follow-ups:"
+        foreach ($r in $reposWithActiveFailures) { Add-Line "- $($r.repo): activeFailedRuns=$($r.activeFailedRuns)" }
     }
 
     if ($reposWithCodeAlerts.Count -gt 0) {
-        "`nCode scanning alert follow-ups:" | Tee-Object -FilePath $OutFile -Append
-        foreach ($r in $reposWithCodeAlerts) {
-            "- $($r.repo): alerts=$($r.codeScanning.count)" | Tee-Object -FilePath $OutFile -Append
-        }
+        Add-Line ""
+        Add-Line "Code scanning alert follow-ups:"
+        foreach ($r in $reposWithCodeAlerts) { Add-Line "- $($r.repo): alerts=$($r.codeScanning.count)" }
     }
 
     if ($reposWithDependabotAlerts.Count -gt 0) {
-        "`nDependabot alert follow-ups:" | Tee-Object -FilePath $OutFile -Append
-        foreach ($r in $reposWithDependabotAlerts) {
-            "- $($r.repo): alerts=$($r.dependabotAlerts.count)" | Tee-Object -FilePath $OutFile -Append
-        }
+        Add-Line ""
+        Add-Line "Dependabot alert follow-ups:"
+        foreach ($r in $reposWithDependabotAlerts) { Add-Line "- $($r.repo): alerts=$($r.dependabotAlerts.count)" }
     }
 } else {
-    "No capability audit JSON report found." | Tee-Object -FilePath $OutFile -Append
+    Add-Line "No capability audit JSON report found."
 }
 
 if ($LatestTriage) {
-    "Latest PR triage report: $($LatestTriage.Name)" | Tee-Object -FilePath $OutFile -Append
+    Add-Line "Latest PR triage report: $($LatestTriage.Name)"
+}
+
+if ($LatestAppAudit) {
+    $apps = Get-Content $LatestAppAudit.FullName -Raw | ConvertFrom-Json
+    $highApps = @($apps | Where-Object { $_.risk -eq "high" -or $_.risk -eq "medium-high" })
+    Add-Line "Latest app audit report: $($LatestAppAudit.Name)"
+    Add-Line "High-risk GitHub App installations: $($highApps.Count)"
+    foreach ($app in $highApps) {
+        Add-Line "- $($app.app_slug): $($app.risk) ($($app.risk_reasons -join ', '))"
+    }
 }
 
 Write-Host ""

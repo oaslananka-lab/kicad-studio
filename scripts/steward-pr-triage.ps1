@@ -1,18 +1,11 @@
 # steward-pr-triage.ps1
-# Deep PR/run triage for one repo or all repos in oaslananka-lab.
+# Triage open PRs and active workflow failures for one repo or all repos.
 #
 # Examples:
-#   pwsh -ExecutionPolicy Bypass -File .\scripts\steward-pr-triage.ps1 -Repo helix
+#   pwsh -ExecutionPolicy Bypass -File .\scripts\steward-pr-triage.ps1 -Repo kicad-mcp-pro
 #   pwsh -ExecutionPolicy Bypass -File .\scripts\steward-pr-triage.ps1 -All
 #
-# This script is read-only.
-#
-# Notes:
-# - Failed runs from closed/deleted PR branches are ignored by default.
-# - Main branch failures are ignored when a newer successful run exists for
-#   the same workflow on main.
-# - Use -IncludeClosedPrFailures to show historical closed-PR failures.
-# - Use -IncludeResolvedMainFailures to show older main failures already followed by success.
+# Read-only.
 
 param(
     [string]$Org = "oaslananka-lab",
@@ -27,7 +20,11 @@ $ErrorActionPreference = "Continue"
 
 function Get-Repos {
     if ($All) {
-        return gh repo list $Org --limit 200 --json name,isArchived | ConvertFrom-Json | Where-Object { -not $_.isArchived }
+        $raw = gh repo list $Org --limit 300 --json name,isArchived 2>$null
+        if ($LASTEXITCODE -ne 0) {
+            throw "Could not list repositories for $Org"
+        }
+        return @($raw | ConvertFrom-Json | Where-Object { -not $_.isArchived })
     }
 
     if (-not $Repo) {
@@ -41,48 +38,105 @@ function Get-CheckSummary {
     param($Pr)
 
     $nodes = @()
-    if ($Pr.statusCheckRollup -and $Pr.statusCheckRollup.Count -gt 0) {
-        $nodes = $Pr.statusCheckRollup
+    if ($Pr.statusCheckRollup) {
+        $nodes = @($Pr.statusCheckRollup)
     }
 
     if (-not $nodes -or $nodes.Count -eq 0) {
-        return "no checks"
-    }
-
-    $failed = @()
-    $pending = @()
-    $passed = @()
-
-    foreach ($c in $nodes) {
-        $name = $c.name
-        if (-not $name) { $name = $c.context }
-
-        $state = $c.state
-        $conclusion = $c.conclusion
-
-        if ($state -eq "SUCCESS" -or $conclusion -eq "SUCCESS") {
-            $passed += $name
-        } elseif ($state -eq "PENDING" -or $state -eq "QUEUED" -or $state -eq "IN_PROGRESS" -or $conclusion -eq $null) {
-            $pending += $name
-        } else {
-            $failed += "$name=$state$conclusion"
+        return [pscustomobject]@{
+            text = "no checks"
+            passed = 0
+            pending = 0
+            failed = 0
+            skipped = 0
+            neutral = 0
+            total = 0
         }
     }
 
-    return "passed=$($passed.Count), pending=$($pending.Count), failed=$($failed.Count)"
+    $passed = 0
+    $pending = 0
+    $failed = 0
+    $skipped = 0
+    $neutral = 0
+
+    foreach ($c in $nodes) {
+        $state = [string]$c.state
+        $status = [string]$c.status
+        $conclusion = [string]$c.conclusion
+
+        if ($conclusion -eq "SUCCESS" -or $state -eq "SUCCESS") {
+            $passed++
+            continue
+        }
+
+        if ($conclusion -eq "SKIPPED") {
+            $skipped++
+            continue
+        }
+
+        if ($conclusion -eq "NEUTRAL") {
+            $neutral++
+            continue
+        }
+
+        if ($status -in @("QUEUED", "IN_PROGRESS", "PENDING") -or $state -in @("PENDING", "QUEUED", "IN_PROGRESS")) {
+            $pending++
+            continue
+        }
+
+        if ($conclusion -in @("FAILURE", "CANCELLED", "TIMED_OUT", "ACTION_REQUIRED", "STARTUP_FAILURE")) {
+            $failed++
+            continue
+        }
+
+        if ([string]::IsNullOrWhiteSpace($conclusion) -and $status -ne "COMPLETED") {
+            $pending++
+            continue
+        }
+
+        if ($conclusion -and $conclusion -ne "SUCCESS") {
+            $failed++
+            continue
+        }
+
+        $neutral++
+    }
+
+    $parts = @(
+        "passed=$passed",
+        "pending=$pending",
+        "failed=$failed",
+        "skipped=$skipped",
+        "neutral=$neutral"
+    )
+
+    return [pscustomobject]@{
+        text = ($parts -join ", ")
+        passed = $passed
+        pending = $pending
+        failed = $failed
+        skipped = $skipped
+        neutral = $neutral
+        total = $nodes.Count
+    }
 }
 
 function Get-Recommendation {
-    param($Pr, [string]$CheckSummary)
+    param($Pr, $CheckSummary)
 
-    $titleLower = $Pr.title.ToLowerInvariant()
+    $titleLower = ([string]$Pr.title).ToLowerInvariant()
 
     if ($Pr.isDraft) {
         return "draft: wait or ask agent"
     }
 
-    if ($CheckSummary -match "failed=[1-9]") {
+    if ($CheckSummary.failed -gt 0) {
         return "needs CI fix"
+    }
+
+    if ($CheckSummary.pending -gt 0) {
+        return "checks pending"
     }
 
     if ($Pr.mergeStateStatus -eq "BEHIND") {
@@ -94,10 +148,10 @@ function Get-Recommendation {
     }
 
     if ($Pr.mergeStateStatus -eq "BLOCKED") {
-        return "blocked: inspect required checks"
+        return "blocked: inspect required checks/reviews"
     }
 
-    if (($Pr.mergeStateStatus -eq "CLEAN" -or $Pr.mergeStateStatus -eq "UNKNOWN") -and $CheckSummary -match "failed=0") {
+    if ($Pr.mergeStateStatus -eq "CLEAN" -and $CheckSummary.failed -eq 0 -and $CheckSummary.pending -eq 0) {
         if ($titleLower -match "bump|deps|dependabot") {
             return "candidate: review then merge/automerge"
         }
@@ -105,7 +159,7 @@ function Get-Recommendation {
     }
 
     if ($Pr.mergeStateStatus -eq "UNKNOWN") {
-        return "checks unknown: open PR"
+        return "checks unknown: inspect"
     }
 
     return "inspect"
@@ -128,10 +182,7 @@ function Is-ResolvedFailure {
         return $false
     }
 
-    $failureTime = [datetime]$Run.createdAt
-    $successTime = [datetime]$LatestSuccessByKey[$key]
-
-    return $successTime -gt $failureTime
+    return ([datetime]$LatestSuccessByKey[$key] -gt [datetime]$Run.createdAt)
 }
 
 $Repos = Get-Repos
@@ -174,7 +225,7 @@ foreach ($R in $Repos) {
             Write-Host "  PR #$($Pr.number) [$($Pr.mergeStateStatus)] $($Pr.title)"
             Write-Host "    head: $($Pr.headRefName) -> $($Pr.baseRefName)"
             Write-Host "    author: $($Pr.author.login) draft=$($Pr.isDraft) review=$($Pr.reviewDecision)"
-            Write-Host "    checks: $checkSummary"
+            Write-Host "    checks: $($checkSummary.text)"
             Write-Host "    labels: $labels"
             Write-Host "    recommendation: $recommendation"
             Write-Host "    $($Pr.url)"
@@ -189,7 +240,12 @@ foreach ($R in $Repos) {
                 mergeState = $Pr.mergeStateStatus
                 reviewDecision = $Pr.reviewDecision
                 isDraft = $Pr.isDraft
-                checks = $checkSummary
+                checks = $checkSummary.text
+                checksPassed = $checkSummary.passed
+                checksPending = $checkSummary.pending
+                checksFailed = $checkSummary.failed
+                checksSkipped = $checkSummary.skipped
+                checksNeutral = $checkSummary.neutral
                 labels = $labels
                 recommendation = $recommendation
                 url = $Pr.url
@@ -209,12 +265,8 @@ foreach ($R in $Repos) {
         foreach ($Run in $Runs) {
             if ($Run.conclusion -eq "success" -and $Run.name -and $Run.headBranch -and $Run.createdAt) {
                 $key = Get-RunKey -Run $Run
-                if (-not $LatestSuccessByKey.ContainsKey($key)) {
+                if (-not $LatestSuccessByKey.ContainsKey($key) -or ([datetime]$Run.createdAt -gt [datetime]$LatestSuccessByKey[$key])) {
                     $LatestSuccessByKey[$key] = $Run.createdAt
-                } else {
-                    if ([datetime]$Run.createdAt -gt [datetime]$LatestSuccessByKey[$key]) {
-                        $LatestSuccessByKey[$key] = $Run.createdAt
-                    }
                 }
             }
         }
@@ -224,7 +276,7 @@ foreach ($R in $Repos) {
         $IgnoredResolvedMain = 0
 
         foreach ($Run in $Runs) {
-            $isFailure = ($Run.conclusion -eq "failure" -or $Run.conclusion -eq "cancelled")
+            $isFailure = ($Run.conclusion -eq "failure" -or $Run.conclusion -eq "cancelled" -or $Run.conclusion -eq "timed_out")
             if (-not $isFailure) {
                 continue
             }
