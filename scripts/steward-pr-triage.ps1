@@ -9,17 +9,18 @@
 #
 # Notes:
 # - Failed runs from closed/deleted PR branches are ignored by default.
-# - Active blockers include:
-#     - failed runs on main
-#     - failed runs on currently open PR branches
-# - Use -IncludeClosedPrFailures to show historical failures too.
+# - Main branch failures are ignored when a newer successful run exists for
+#   the same workflow on main.
+# - Use -IncludeClosedPrFailures to show historical closed-PR failures.
+# - Use -IncludeResolvedMainFailures to show older main failures already followed by success.
 
 param(
     [string]$Org = "oaslananka-lab",
     [string]$Repo,
     [switch]$All,
     [int]$Limit = 50,
-    [switch]$IncludeClosedPrFailures
+    [switch]$IncludeClosedPrFailures,
+    [switch]$IncludeResolvedMainFailures
 )
 
 $ErrorActionPreference = "Continue"
@@ -110,6 +111,29 @@ function Get-Recommendation {
     return "inspect"
 }
 
+function Get-RunKey {
+    param($Run)
+    return "$($Run.name)||$($Run.headBranch)"
+}
+
+function Is-ResolvedFailure {
+    param($Run, $LatestSuccessByKey)
+
+    if (-not $Run.createdAt) {
+        return $false
+    }
+
+    $key = Get-RunKey -Run $Run
+    if (-not $LatestSuccessByKey.ContainsKey($key)) {
+        return $false
+    }
+
+    $failureTime = [datetime]$Run.createdAt
+    $successTime = [datetime]$LatestSuccessByKey[$key]
+
+    return $successTime -gt $failureTime
+}
+
 $Repos = Get-Repos
 $Report = @()
 
@@ -175,18 +199,54 @@ foreach ($R in $Repos) {
 
     $RunsRaw = gh run list `
         --repo $FullName `
-        --limit 50 `
+        --limit 100 `
         --json databaseId,name,status,conclusion,headBranch,event,createdAt,url 2>$null
 
     if ($LASTEXITCODE -eq 0) {
         $Runs = @($RunsRaw | ConvertFrom-Json)
 
-        $Failed = $Runs | Where-Object {
-            ($_.conclusion -eq "failure" -or $_.conclusion -eq "cancelled") -and (
-                $IncludeClosedPrFailures -or
-                $_.headBranch -eq "main" -or
-                $OpenPrBranches.ContainsKey($_.headBranch)
-            )
+        $LatestSuccessByKey = @{}
+        foreach ($Run in $Runs) {
+            if ($Run.conclusion -eq "success" -and $Run.name -and $Run.headBranch -and $Run.createdAt) {
+                $key = Get-RunKey -Run $Run
+                if (-not $LatestSuccessByKey.ContainsKey($key)) {
+                    $LatestSuccessByKey[$key] = $Run.createdAt
+                } else {
+                    if ([datetime]$Run.createdAt -gt [datetime]$LatestSuccessByKey[$key]) {
+                        $LatestSuccessByKey[$key] = $Run.createdAt
+                    }
+                }
+            }
+        }
+
+        $Failed = @()
+        $IgnoredClosed = 0
+        $IgnoredResolvedMain = 0
+
+        foreach ($Run in $Runs) {
+            $isFailure = ($Run.conclusion -eq "failure" -or $Run.conclusion -eq "cancelled")
+            if (-not $isFailure) {
+                continue
+            }
+
+            $isOpenPrBranch = $OpenPrBranches.ContainsKey($Run.headBranch)
+            $isMain = ($Run.headBranch -eq "main")
+            $isClosedPrFailure = (-not $isMain -and -not $isOpenPrBranch)
+            $isResolvedMainFailure = ($isMain -and (Is-ResolvedFailure -Run $Run -LatestSuccessByKey $LatestSuccessByKey))
+
+            if ($isClosedPrFailure -and -not $IncludeClosedPrFailures) {
+                $IgnoredClosed++
+                continue
+            }
+
+            if ($isResolvedMainFailure -and -not $IncludeResolvedMainFailures) {
+                $IgnoredResolvedMain++
+                continue
+            }
+
+            if ($isMain -or $isOpenPrBranch -or $IncludeClosedPrFailures) {
+                $Failed += $Run
+            }
         }
 
         if ($Failed.Count -gt 0) {
@@ -212,16 +272,12 @@ foreach ($R in $Repos) {
             Write-Host "Active failed/cancelled runs: 0"
         }
 
-        if (-not $IncludeClosedPrFailures) {
-            $Historical = $Runs | Where-Object {
-                ($_.conclusion -eq "failure" -or $_.conclusion -eq "cancelled") -and
-                $_.headBranch -ne "main" -and
-                -not $OpenPrBranches.ContainsKey($_.headBranch)
-            }
+        if ($IgnoredClosed -gt 0 -and -not $IncludeClosedPrFailures) {
+            Write-Host "Ignored historical failures from closed PR branches: $IgnoredClosed" -ForegroundColor DarkGray
+        }
 
-            if ($Historical.Count -gt 0) {
-                Write-Host "Ignored historical failures from closed PR branches: $($Historical.Count)" -ForegroundColor DarkGray
-            }
+        if ($IgnoredResolvedMain -gt 0 -and -not $IncludeResolvedMainFailures) {
+            Write-Host "Ignored resolved main failures: $IgnoredResolvedMain" -ForegroundColor DarkGray
         }
     }
 }
