@@ -1,0 +1,19 @@
+# Auto-merge Policy
+
+allowed:
+  - docs-only changes
+  - tests-only changes
+  - lint/format-only changes
+  - dependency patch updates
+  - low-risk dependency minor updates
+  - generated API docs when source changes are already reviewed
+
+requires_human:
+  - runtime behavior changes
+  - public API changes
+  - dependency major updates
+  - release or package publishing changes
+  - CI/CD workflow changes
+  - secret handling changes
+  - auth, security, crypto, billing, or permission logic
+  - destructive cleanup

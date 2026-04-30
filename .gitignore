@@ -1,0 +1,37 @@
+# Local/private files
+.env
+.env.*
+*.local
+*.secret
+*.token
+*.key
+*.pem
+*.p12
+*.pfx
+
+# Agent scratch
+.agent/
+.local-agent/
+.owner-notes/
+.private-prompts/
+scratch/
+tmp/
+
+# Generated reports
+reports/*.json
+reports/*.html
+reports/*.log
+
+# Python
+.venv/
+__pycache__/
+*.pyc
+
+# Node
+node_modules/
+
+# OS/editor
+.DS_Store
+Thumbs.db
+.vscode/settings.json
+.idea/

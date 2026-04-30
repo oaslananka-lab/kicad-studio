@@ -1,0 +1,28 @@
+# Repository Registry
+# This file is safe to edit manually.
+# Add important repos first; repo-steward scripts can later use this as the source of truth.
+
+repos:
+  - name: .github
+    org: oaslananka-lab
+    remote: oaslananka-lab/.github
+    tier: 1
+    type: community-defaults
+    public_mirror: null
+    package: null
+
+  - name: kicad-mcp-pro
+    org: oaslananka-lab
+    remote: oaslananka-lab/kicad-mcp-pro
+    public_mirror: oaslananka/kicad-mcp-pro
+    tier: 1
+    type: python
+    package: pypi
+
+  - name: a2a-mesh
+    org: oaslananka-lab
+    remote: oaslananka-lab/a2a-mesh
+    public_mirror: oaslananka/a2a-mesh
+    tier: 1
+    type: node
+    package: npm

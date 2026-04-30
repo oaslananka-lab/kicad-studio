@@ -1,0 +1,29 @@
+# Repository Tiers
+
+tiers:
+  1:
+    name: active-showcase
+    description: Important active public/showcase repositories.
+    cadence:
+      status: daily
+      security: daily
+      dependencies: weekly
+      docs: weekly
+      release_verify: every_release
+
+  2:
+    name: active-utility
+    description: Useful but lower-priority repositories.
+    cadence:
+      status: weekly
+      security: weekly
+      dependencies: weekly
+      docs: monthly
+
+  3:
+    name: archive-or-research
+    description: Older, demo, research, or low-maintenance repositories.
+    cadence:
+      status: monthly
+      security: monthly
+      dependencies: monthly
