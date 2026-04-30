@@ -1,12 +1,14 @@
 # Jules / Autonomous Agent Runbook
 
-Jules can automatically resolve issues labeled with `type:bug`, `type:docs`, `type:refactor`, or `good first issue`.
+Jules may be used as a coding worker only for issues that are explicitly labeled `agent:candidate` and classified as `risk:low` or `risk:medium`.
+
+Jules must not be used for secrets, release publishing, workflow permission escalation, package ownership, marketplace account setup, OIDC/trusted publishing, or major dependency/runtime migrations. See [maintenance/automation-policy.md](maintenance/automation-policy.md) for the full policy.
 
 ## Setup
 
 1. Add `JULES_API_KEY` to Doppler `all/main`.
 2. Ensure `DOPPLER_TOKEN` is set as a GitHub Secret.
-3. Once the Jules REST API is confirmed for this repository, enable the `Jules auto-trigger` workflow.
+3. Keep Jules triggers manual or label-gated until the repository policy is enforced by workflow checks.
 
 ## Manual trigger via CLI
 

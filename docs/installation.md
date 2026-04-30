@@ -2,9 +2,9 @@
 
 ## Requirements
 
-- VS Code 1.95 or newer
-- Node.js 20 or newer for local development
-- KiCad 6 or newer for basic support
+- VS Code 1.99 or newer
+- Node.js 24.x and npm 11.x for local development
+- KiCad 9 or newer for basic support
 - KiCad 10 for variants, tuning metadata, and 3D PDF export
 
 ## KiCad CLI Setup
@@ -44,4 +44,4 @@ If `kicad-mcp-pro` is installed:
 
 - The `oaslananka-lab` GitHub mirror owns the primary automated CI/CD workflows.
 - Azure DevOps and GitLab are manual fallback pipelines.
-- GitHub Actions in the personal mirror are manual fallback workflows only.
+- Publishing workflows require protected approval gates and secret names managed outside the repository.

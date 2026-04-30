@@ -1,23 +1,89 @@
 name: Feature Request
-description: Suggest an idea for KiCad Studio
-labels: ['type:feature']
+description: Propose a KiCad Studio improvement
+labels: ['type:feature', 'needs:triage']
 body:
   - type: textarea
     id: problem
     attributes:
-      label: Is your feature request related to a problem?
-      description: A concise description of what the problem is.
+      label: Problem or workflow
+      description: What user workflow should improve?
     validations:
       required: true
   - type: textarea
-    id: solution
+    id: proposal
     attributes:
-      label: Describe the solution you'd like
-      description: A concise description of what you want to happen.
+      label: Proposed behavior
+      description: Describe the requested outcome.
     validations:
       required: true
   - type: textarea
     id: alternatives
     attributes:
-      label: Describe alternatives you've considered
-      description: A concise description of any alternative solutions or features you've considered.
+      label: Alternatives considered
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+      placeholder: '1.99.0 or newer'
+  - type: input
+    id: kicad-version
+    attributes:
+      label: KiCad / kicad-cli version
+      placeholder: 'KiCad 10.0.x, KiCad 9.x, or not installed'
+  - type: input
+    id: os
+    attributes:
+      label: OS
+      placeholder: 'Windows 11, macOS 15, Ubuntu 24.04, ...'
+  - type: dropdown
+    id: workspace-trust
+    attributes:
+      label: Workspace Trust impact
+      options:
+        - No expected impact
+        - Requires trusted workspace
+        - Should work in Restricted Mode
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: scope
+    attributes:
+      label: Scope
+      options:
+        - Viewer
+        - KiCad CLI / exports
+        - DRC / ERC
+        - MCP / AI integration
+        - Packaging / install
+        - CI / repository automation
+        - Documentation
+        - Other
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Expected implementation risk
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: automation
+    attributes:
+      label: May a coding agent work on this?
+      options:
+        - Yes, if maintainers label it agent:candidate
+        - No, human maintainer only
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done criteria
+      description: What tests, docs, or behavior should exist when this is complete?

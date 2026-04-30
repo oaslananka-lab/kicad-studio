@@ -26,6 +26,7 @@ playwright-report/**
 .gitignore
 .prettierignore
 Taskfile.yml
+renovate.json
 commitlint.config.cjs
 tsconfig.json
 tsconfig.test.json

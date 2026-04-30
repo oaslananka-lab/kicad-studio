@@ -12,12 +12,13 @@ KiCad Studio keeps the personal GitHub repository as the primary source mirror a
 
 ## Trigger Policy
 
-- GitHub Actions in `oaslananka-lab` runs CI automatically for pushes and pull requests to `main`
-  and `develop`.
-- GitHub Actions in `oaslananka-lab` runs release packaging/publishing on `v*` tags, with the
-  `marketplace` environment acting as the manual approval gate before Marketplace publishing.
-- Personal GitHub workflows are manual fallback only. Workflow jobs are guarded so automatic push
-  and pull-request events do not run primary CI/CD in the personal mirror.
+- GitHub Actions in `oaslananka-lab` runs CI automatically for pushes, pull requests, and merge
+  queue events. Repository guards keep those jobs scoped to the lab mirror.
+- GitHub Actions in `oaslananka-lab` runs manual release packaging through the `Release` workflow,
+  with the `release` environment and `APPROVE_RELEASE` confirmation acting as approval gates before
+  Marketplace or Open VSX publishing.
+- The canonical GitHub repository is the public source of truth. Lab workflows are guarded so the
+  automation mirror owns primary CI/CD.
 - Azure Pipelines are manual-only (`trigger: none`, `pr: none`).
 - GitLab CI is manual-only and starts only from the GitLab web UI.
 
@@ -54,3 +55,5 @@ git push github-org main
 git push origin --tags
 git push github-org --tags
 ```
+
+Routine feature work should use a branch and PR instead of pushing directly to `main`.

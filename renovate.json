@@ -7,13 +7,49 @@
     ":separateMajorReleases"
   ],
   "timezone": "Europe/Istanbul",
-  "labels": ["dependencies"],
-  "enabledManagers": ["npm", "github-actions", "dockerfile"],
+  "labels": ["dependencies", "needs:human"],
+  "enabledManagers": ["npm", "dockerfile"],
   "rangeStrategy": "pin",
   "packageRules": [
     {
       "matchManagers": ["npm"],
-      "rangeStrategy": "pin",
+      "rangeStrategy": "pin"
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["devDependencies"],
+      "matchUpdateTypes": ["patch", "minor"],
+      "labels": [
+        "dependencies",
+        "type:maintenance",
+        "area:js",
+        "risk:low",
+        "agent:candidate"
+      ],
+      "automerge": false
+    },
+    {
+      "matchManagers": ["npm"],
+      "matchDepTypes": ["dependencies"],
+      "labels": ["dependencies", "runtime", "needs:human", "risk:medium"],
+      "automerge": false
+    },
+    {
+      "matchPackageNames": [
+        "@types/vscode",
+        "@vscode/vsce",
+        "ovsx",
+        "typescript",
+        "webpack",
+        "webpack-cli",
+        "eslint",
+        "@eslint/js",
+        "jest",
+        "ts-jest",
+        "@playwright/test",
+        "semver"
+      ],
+      "labels": ["dependencies", "core-runtime", "needs:human", "risk:medium"],
       "automerge": false
     },
     {
@@ -22,8 +58,14 @@
       "description": "Keep VS Code typings aligned with engines.vscode until the extension engine is intentionally raised."
     },
     {
-      "matchManagers": ["github-actions"],
-      "groupName": "github-actions",
+      "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "breaking-change", "needs:human", "risk:high"],
+      "automerge": false
+    },
+    {
+      "matchManagers": ["dockerfile"],
+      "matchUpdateTypes": ["major"],
+      "labels": ["dependencies", "breaking-change", "needs:human", "risk:high"],
       "automerge": false
     }
   ],

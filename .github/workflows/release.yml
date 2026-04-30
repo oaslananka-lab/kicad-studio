@@ -36,10 +36,19 @@ jobs:
       - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
         with:
           fetch-depth: 0
+          persist-credentials: false
 
       - name: Validate approval
+        env:
+          APPROVAL: ${{ inputs.approval }}
+          PUBLISH: ${{ inputs.publish }}
+          VERSION: ${{ inputs.version }}
         run: |
-          if [ "${{ inputs.publish }}" = "true" ] && [ "${{ inputs.approval }}" != "APPROVE_RELEASE" ]; then
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Version must look like v2.7.7 or v2.7.7-rc.1." >&2
+            exit 1
+          fi
+          if [ "$PUBLISH" = "true" ] && [ "$APPROVAL" != "APPROVE_RELEASE" ]; then
             echo "Set approval=APPROVE_RELEASE to publish" >&2; exit 1
           fi
 
@@ -55,6 +64,12 @@ jobs:
 
       - name: Package
         run: npm exec -- task package
+
+      - name: Verify package contents
+        run: npm run package:ls
+
+      - name: Check bundle size
+        run: npm run check:bundle-size
 
       - name: Build provenance attestation
         if: hashFiles('*.vsix') != ''
@@ -80,14 +95,16 @@ jobs:
       - name: Create GitHub release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PUBLISH: ${{ inputs.publish }}
+          VERSION: ${{ inputs.version }}
         run: |
           set -euo pipefail
-          gh_args=(--repo "${{ github.repository }}" \
-                   --title "${{ inputs.version }}" \
+          gh_args=(--repo "$GITHUB_REPOSITORY" \
+                   --title "$VERSION" \
                    --generate-notes)
-          if [ "${{ inputs.publish }}" != "true" ]; then
+          if [ "$PUBLISH" != "true" ]; then
             gh_args+=(--draft)
           fi
           assets=()
           if compgen -G "*.vsix" > /dev/null; then assets+=(*.vsix); fi
-          gh release create "${{ inputs.version }}" "${gh_args[@]}" "${assets[@]}"
+          gh release create "$VERSION" "${gh_args[@]}" "${assets[@]}"

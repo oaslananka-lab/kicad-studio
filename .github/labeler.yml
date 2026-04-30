@@ -13,6 +13,19 @@ type:docs:
   - changed-files:
       - any-glob-to-any-file: ['docs/**', '*.md']
 
+type:maintenance:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            '.github/**',
+            'scripts/**',
+            'Taskfile.yml',
+            'renovate.json',
+            '.node-version',
+            '.nvmrc',
+            '.npmrc'
+          ]
+
 type:refactor:
   - changed-files:
       - any-glob-to-any-file: ['src/**', 'test/**']
@@ -32,3 +45,69 @@ type:chore:
 area:js:
   - changed-files:
       - any-glob-to-any-file: ['**/*.js', '**/*.ts', '**/*.cjs']
+
+area:ci:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            '.github/workflows/**',
+            'azure-pipelines*.yml',
+            '.gitlab-ci.yml',
+            'Taskfile.yml'
+          ]
+
+area:docs:
+  - changed-files:
+      - any-glob-to-any-file:
+          ['docs/**', 'README.md', 'SECURITY.md', 'SUPPORT.md']
+
+area:tests:
+  - changed-files:
+      - any-glob-to-any-file:
+          ['test/**', 'jest.config.js', 'playwright.config.ts']
+
+area:package:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            'package.json',
+            'package-lock.json',
+            '.vscodeignore',
+            'webpack.config.js',
+            'scripts/check-bundle-size.js'
+          ]
+
+area:security:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            'SECURITY.md',
+            '.github/workflows/codeql.yml',
+            '.github/workflows/gitleaks.yml',
+            '.github/workflows/scorecard.yml',
+            'scripts/local-security.*',
+            '.doppler/secrets.txt'
+          ]
+
+area:extension:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            'src/**',
+            'syntaxes/**',
+            'schemas/**',
+            'snippets/**',
+            'language-configuration.json'
+          ]
+
+area:marketplace:
+  - changed-files:
+      - any-glob-to-any-file:
+          [
+            'package.json',
+            '.vscodeignore',
+            'assets/**',
+            'media/**',
+            '.github/workflows/release.yml',
+            'scripts/publish.sh'
+          ]

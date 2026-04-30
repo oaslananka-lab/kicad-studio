@@ -1,0 +1,60 @@
+name: Maintenance Task
+description: Track CI, security, dependency, packaging, or repository maintenance
+labels: ['type:maintenance', 'needs:triage']
+body:
+  - type: textarea
+    id: summary
+    attributes:
+      label: Summary
+      description: What needs to change?
+    validations:
+      required: true
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options:
+        - area:ci
+        - area:docs
+        - area:tests
+        - area:package
+        - area:security
+        - area:extension
+        - area:marketplace
+        - dependencies
+        - runtime
+        - core-runtime
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Risk level
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+    validations:
+      required: true
+  - type: dropdown
+    id: automation
+    attributes:
+      label: May a coding agent work on this?
+      options:
+        - Yes, if maintainers label it agent:candidate
+        - No, human maintainer only
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: constraints
+    attributes:
+      label: Constraints
+      description: Note release, secret, workspace trust, marketplace, or compatibility constraints.
+  - type: textarea
+    id: done
+    attributes:
+      label: Done criteria
+      description: List the expected checks, docs, or behavior needed to close this.
+    validations:
+      required: true

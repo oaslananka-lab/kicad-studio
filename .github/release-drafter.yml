@@ -12,11 +12,22 @@ categories:
   - title: '📚 Docs'
     labels: [type:docs]
   - title: '🧹 Internal'
-    labels: [type:chore, type:refactor, dependencies]
+    labels: [type:maintenance, type:chore, type:refactor, dependencies]
 version-resolver:
-  major: { labels: [breaking] }
+  major: { labels: [breaking, breaking-change] }
   minor: { labels: [type:feature, feature] }
-  patch: { labels: [type:bug, type:perf, type:security, type:docs, type:chore] }
+  patch:
+    {
+      labels:
+        [
+          type:bug,
+          type:perf,
+          type:security,
+          type:docs,
+          type:maintenance,
+          type:chore
+        ]
+    }
   default: patch
 template: |
   ## What's Changed

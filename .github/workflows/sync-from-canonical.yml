@@ -27,12 +27,16 @@ jobs:
         with:
           fetch-depth: 0
           token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN || github.token }}
+          persist-credentials: false
 
       - name: Pull from canonical and replay
+        env:
+          SYNC_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN || github.token }}
         run: |
           set -euo pipefail
           git config user.name  "oaslananka-lab[bot]"
           git config user.email "oaslananka-lab@users.noreply.github.com"
+          git remote set-url origin "https://x-access-token:${SYNC_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
 
           git remote add canonical "https://github.com/oaslananka/kicad-studio.git"
           git fetch canonical --prune --tags

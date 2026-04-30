@@ -2,13 +2,15 @@
 
 ## Development Setup
 
-1. Install Node.js `24.14.1`, npm `11.13.x`, and VS Code 1.95+.
-2. Run `npm ci`.
+1. Install Node.js `24.14.1`, npm `11.13.x`, and VS Code 1.99+.
+2. Run `task install` or `npm ci`.
 3. Press `F5` to launch the Extension Development Host.
-4. Let the Git hooks handle fast staged checks on commit and run `npm run check` before push.
-5. Run `npm run check:ci` when you want the closest local equivalent of the primary CI package gate.
-6. Run `npm test` before sending substantial changes when the integration host is available.
-7. Run `npm run test:e2e` for the desktop smoke suite when a Windows desktop session is available.
+4. Let the Git hooks handle fast staged checks on commit and run `task pre-push` before push.
+5. Run `task ci` or `npm run check:ci` when you want the closest local equivalent of the primary CI package gate.
+6. Run `npm test` before sending substantial changes when the VS Code integration host is available.
+7. Run `npm run test:e2e` for the desktop smoke suite when a desktop session is available.
+
+KiCad and `kicad-cli` are optional for most unit tests. Install KiCad 10 when validating DRC/ERC, exports, variants, 3D PDF, or end-to-end extension behavior.
 
 ## Project Areas
 
@@ -43,15 +45,16 @@ Allowed prefixes:
 
 ## Pull Request Checklist
 
-- `npm run lint` passes
-- `npm run check` passes
+- `task pre-push` passes
+- `task ci` or `npm run check:ci` passes for release-facing changes
 - `npm run test:e2e` passes for desktop-facing changes when the environment supports it
 - relevant docs are updated
 - screenshots or reproduction notes are included for UI changes
 - new commands/settings are reflected in `package.json`
+- workspace trust, security/secret, and release/package impacts are called out in the PR body
 
 ## CI/CD Expectations
 
 - The `oaslananka-lab` GitHub mirror owns the primary automated CI/CD workflows.
 - Azure DevOps and GitLab are manual fallback pipelines.
-- Marketplace publishing is approval-gated through the GitHub `marketplace` environment.
+- Marketplace publishing is approval-gated through the GitHub `release` environment and requires explicit maintainer approval.
