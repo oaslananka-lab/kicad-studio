@@ -14,13 +14,13 @@ KiCad Studio turns VS Code into a practical KiCad workspace: view schematics and
 ## Repository And CI/CD
 
 - **Canonical Repository:** `https://github.com/oaslananka/kicad-studio`
-  All development and user interaction happens here. Zero GitHub Actions are consumed on this account.
+  Public project identity, issues, documentation, and release metadata live here.
 - **CI/CD Mirror:** `https://github.com/oaslananka-lab/kicad-studio`
-  Automated CI, security scans, and releases run here. The mirror periodically pulls from canonical.
+  Automated CI, security scans, release packaging, and verification run here. The mirror periodically pulls from canonical.
 - **Operations:** See [docs/repository-operations.md](docs/repository-operations.md) for detailed guidance on the dual-owner model.
 - **Fallbacks:** Azure DevOps and GitLab pipelines are maintained for manual redundancy.
 
-## What's New In 2.7.0
+## What's New In 2.7.x
 
 - VS Code engine raised to `^1.99.0` with matching manifest typings.
 - Node.js/npm development toolchain aligned on Node.js 24.x and npm 11+.
@@ -91,7 +91,7 @@ These projects are not bundled with this extension; attribution is provided for 
 
 #### Compatibility
 
-KiCad Studio 2.7.0 supports `kicad-mcp-pro >=3.0.0 <4.0.0` and recommends `>=3.0.2 <4.0.0`. The extension was tested against `kicad-mcp-pro 3.0.2`. If a connected server reports a version outside the required range, MCP-dependent commands are disabled and KiCad-only viewers, exports, checks, BOM/netlist, language services, and library features continue to work.
+KiCad Studio 2.7.x supports `kicad-mcp-pro >=3.0.0 <4.0.0` and recommends `>=3.0.2 <4.0.0`. The extension was tested against `kicad-mcp-pro 3.0.2`. If a connected server reports a version outside the required range, MCP-dependent commands are disabled and KiCad-only viewers, exports, checks, BOM/netlist, language services, and library features continue to work.
 
 See [docs/INTEGRATION.md](docs/INTEGRATION.md) for the detailed MCP workflow.
 
@@ -183,6 +183,7 @@ Important settings include:
 - [docs/AI_PROVIDERS.md](docs/AI_PROVIDERS.md)
 - [docs/installation.md](docs/installation.md)
 - [docs/CONTRIBUTING.md](docs/CONTRIBUTING.md)
+- [docs/maintenance/automation-policy.md](docs/maintenance/automation-policy.md)
 
 ## Troubleshooting
 
@@ -208,21 +209,34 @@ Important settings include:
 
 ### Local Commands
 
+- `task install`
+- `task lint`
+- `task typecheck`
+- `task test:unit`
+- `task build`
+- `task package`
+- `task package:ls`
+- `task security:ci`
+- `task pre-push`
+- `task ci`
 - `npm ci`
 - `npm run check`
 - `npm run check:ci`
 - `npm run format:check`
 - `npm run lint`
 - `npm run typecheck`
+- `npm run check:manifest`
+- `npm run check:workspace-trust`
 - `npm run test:unit`
 - `npm test`
 - `npm run build`
 - `npm run build:prod`
 - `npm run package`
+- `npm run package:ls`
 
 ### CI/CD Layout
 
-- `.github/workflows/ci.yml` and `.github/workflows/publish.yml` are the primary GitHub Actions workflows for the `oaslananka-lab` organization mirror.
+- `.github/workflows/ci.yml`, `.github/workflows/release.yml`, CodeQL, Gitleaks, Scorecard, and label/release-drafter workflows are the primary GitHub Actions workflows for the `oaslananka-lab` organization mirror.
 - `azure-pipelines-ci.yml` and `azure-pipelines-publish.yml` are manual fallback Azure pipelines.
 - `.gitlab-ci.yml` is a manual fallback GitLab pipeline.
 
@@ -237,3 +251,4 @@ MIT
 ## Operations
 
 See [docs/repository-operations.md](docs/repository-operations.md) for CI/CD and release guidance.
+

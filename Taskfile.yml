@@ -27,6 +27,16 @@ tasks:
     cmds:
       - npm run typecheck
 
+  check:manifest:
+    desc: Validate VS Code extension package metadata
+    cmds:
+      - npm run check:manifest
+
+  check:workspace-trust:
+    desc: Validate restricted workspace capability metadata
+    cmds:
+      - npm run check:workspace-trust
+
   test:unit:
     desc: Run unit tests
     cmds:
@@ -47,6 +57,11 @@ tasks:
     cmds:
       - npm run package
 
+  package:ls:
+    desc: Inspect packaged VSIX file list
+    cmds:
+      - npm run package:ls
+
   security:ci:
     desc: CI-safe security checks (npm audit only)
     cmds:
@@ -65,6 +80,8 @@ tasks:
     cmds:
       - task: lint
       - task: typecheck
+      - task: check:manifest
+      - task: check:workspace-trust
       - task: test:unit
       - task: security:ci
 
@@ -73,10 +90,22 @@ tasks:
     cmds:
       - task: lint
       - task: typecheck
+      - task: check:manifest
+      - task: check:workspace-trust
       - task: test:unit:coverage
       - task: build
       - task: package
+      - task: package:ls
+      - npm run check:bundle-size
       - task: security:ci
+
+  doppler:check:
+    desc: Verify required release secret names exist in Doppler
+    cmds:
+      - cmd: bash scripts/verify_doppler_secrets.sh
+        platforms: [linux, darwin]
+      - cmd: powershell -NoProfile -ExecutionPolicy Bypass -File scripts/verify_doppler_secrets.ps1
+        platforms: [windows]
 
   hooks:
     desc: Install git hooks (run once after clone)

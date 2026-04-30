@@ -4,6 +4,8 @@
   color: 0e8a16
 - name: type:docs
   color: 0075ca
+- name: type:maintenance
+  color: cfd3d7
 - name: type:refactor
   color: c5def5
 - name: type:perf
@@ -28,6 +30,38 @@
   color: b60205
 - name: status:waiting-feedback
   color: bfd4f2
+- name: needs:triage
+  color: ededed
+- name: needs:human
+  color: bfd4f2
+- name: agent:candidate
+  color: c5def5
+- name: agent:working
+  color: 1d76db
+- name: agent:needs-human
+  color: bfd4f2
+- name: risk:low
+  color: c2e0c6
+- name: risk:medium
+  color: fbca04
+- name: risk:high
+  color: b60205
+- name: area:ci
+  color: 5319e7
+- name: area:docs
+  color: 0075ca
+- name: area:tests
+  color: d4c5f9
+- name: area:package
+  color: 0366d6
+- name: area:security
+  color: b60205
+- name: area:extension
+  color: 0e8a16
+- name: area:marketplace
+  color: fbca04
+- name: area:js
+  color: 0366d6
 - name: good first issue
   color: 7057ff
 - name: help wanted
@@ -38,5 +72,11 @@
   color: b60205
 - name: breaking
   color: b60205
+- name: breaking-change
+  color: b60205
 - name: regression
   color: b60205
+- name: core-runtime
+  color: 0e8a16
+- name: runtime
+  color: 0e8a16

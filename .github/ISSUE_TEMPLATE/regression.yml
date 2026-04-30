@@ -1,18 +1,87 @@
 name: Regression
-description: Report a feature that worked in a previous version but is now broken
-labels: ['type:bug', 'regression']
+description: Report behavior that worked before and is now broken
+labels: ['type:bug', 'regression', 'needs:triage']
 body:
   - type: input
-    id: version
+    id: last-working-version
     attributes:
-      label: Version
-      description: In which version did it last work?
+      label: Last known working version
+      placeholder: '2.7.x'
+    validations:
+      required: true
+  - type: input
+    id: first-broken-version
+    attributes:
+      label: First known broken version
+      placeholder: '2.7.x, main, or unknown'
     validations:
       required: true
   - type: textarea
-    id: description
+    id: expected
     attributes:
-      label: Description
-      description: What is broken now?
+      label: Expected behavior
     validations:
       required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual behavior
+    validations:
+      required: true
+  - type: textarea
+    id: reproduction
+    attributes:
+      label: Reproduction steps
+      placeholder: |
+        1. Install version ...
+        2. Open workspace ...
+        3. Run command ...
+    validations:
+      required: true
+  - type: input
+    id: vscode-version
+    attributes:
+      label: VS Code version
+  - type: input
+    id: kicad-version
+    attributes:
+      label: KiCad / kicad-cli version
+  - type: input
+    id: os
+    attributes:
+      label: OS
+  - type: dropdown
+    id: workspace-trust
+    attributes:
+      label: Workspace Trust state
+      options:
+        - Trusted
+        - Restricted
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Expected fix risk
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: automation
+    attributes:
+      label: May a coding agent work on this?
+      options:
+        - Yes, if maintainers label it agent:candidate
+        - No, human maintainer only
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done criteria

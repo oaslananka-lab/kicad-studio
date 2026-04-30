@@ -3,18 +3,21 @@ name: Auto-label
 on:
   pull_request:
     types: [opened, synchronize]
-  issues:
-    types: [opened]
 
 permissions:
   contents: read
   issues: write
   pull-requests: write
 
+concurrency:
+  group: auto-label-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: true
+
 jobs:
   labeler:
     if: github.repository == 'oaslananka-lab/kicad-studio'
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - uses: actions/labeler@8558fd74291d67161a8a78ce36a881fa63b766a9
         with:

@@ -6,14 +6,17 @@ on:
     branches: ['main']
   workflow_dispatch:
 
-permissions: read-all
+permissions:
+  contents: read
 
 jobs:
   analysis:
     name: Scorecard analysis
     if: github.repository == 'oaslananka-lab/kicad-studio'
     runs-on: ubuntu-latest
+    timeout-minutes: 20
     permissions:
+      contents: read
       security-events: write
       id-token: write
 

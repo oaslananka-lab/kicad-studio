@@ -13,12 +13,18 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: codeql-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 jobs:
   analyze:
     name: Analyze
     if: github.repository == 'oaslananka-lab/kicad-studio'
     runs-on: ubuntu-latest
+    timeout-minutes: 30
     permissions:
+      contents: read
       actions: read
       security-events: write
 
@@ -30,6 +36,8 @@ jobs:
     steps:
       - name: Checkout repository
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+        with:
+          persist-credentials: false
 
       - name: Initialize CodeQL
         uses: github/codeql-action/init@95e58e9a2cdfd71adc6e0353d5c52f41a045d225

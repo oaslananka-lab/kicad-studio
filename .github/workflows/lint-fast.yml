@@ -20,6 +20,8 @@ jobs:
     timeout-minutes: 3
     steps:
       - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+        with:
+          persist-credentials: false
       - name: actionlint
         uses: raven-actions/actionlint@205b530c5d9fa8f44ae9ed59f341a0db994aa6f8
         with:
@@ -35,6 +37,8 @@ jobs:
     timeout-minutes: 5
     steps:
       - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
+        with:
+          persist-credentials: false
       - name: Check Node project
         id: node-project
         run: |

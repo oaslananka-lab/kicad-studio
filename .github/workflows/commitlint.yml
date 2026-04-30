@@ -2,18 +2,22 @@ name: Commitlint
 
 on:
   pull_request:
-  merge_group:
 
 permissions:
   contents: read
+
+concurrency:
+  group: commitlint-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
 
 jobs:
   lint:
     if: github.repository == 'oaslananka-lab/kicad-studio'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
-        with: { fetch-depth: 0 }
+        with: { fetch-depth: 0, persist-credentials: false }
       - uses: actions/setup-node@670825a89dc0abd596e7a3abd0f5e3f6e5faf37c
         with: { node-version-file: '.node-version' }
       - run: npm ci

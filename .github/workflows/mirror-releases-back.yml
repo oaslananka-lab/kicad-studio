@@ -7,6 +7,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: mirror-release-${{ github.event.release.tag_name }}
+  cancel-in-progress: false
+
 jobs:
   mirror-release:
     if: github.repository == 'oaslananka-lab/kicad-studio'
@@ -16,34 +20,39 @@ jobs:
       - name: Download release assets
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
         run: |
           set -euo pipefail
           mkdir -p assets
-          gh release download "${{ github.event.release.tag_name }}" \
+          gh release download "$RELEASE_TAG" \
             --repo oaslananka-lab/kicad-studio --dir assets
 
       - name: Re-publish on canonical
         env:
           GH_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN }}
+          RELEASE_BODY: ${{ github.event.release.body }}
+          RELEASE_NAME: ${{ github.event.release.name }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          RELEASE_TARGET: ${{ github.event.release.target_commitish }}
         run: |
           set -euo pipefail
-          if gh release view "${{ github.event.release.tag_name }}" --repo oaslananka/kicad-studio >/dev/null 2>&1; then
-            gh release edit "${{ github.event.release.tag_name }}" \
+          if gh release view "$RELEASE_TAG" --repo oaslananka/kicad-studio >/dev/null 2>&1; then
+            gh release edit "$RELEASE_TAG" \
               --repo oaslananka/kicad-studio \
-              --title "${{ github.event.release.name }}" \
-              --notes "${{ github.event.release.body }}"
+              --title "$RELEASE_NAME" \
+              --notes "$RELEASE_BODY"
             if compgen -G "assets/*" > /dev/null; then
-              gh release upload "${{ github.event.release.tag_name }}" \
+              gh release upload "$RELEASE_TAG" \
                 --repo oaslananka/kicad-studio assets/* --clobber
             fi
           else
             args=(--repo oaslananka/kicad-studio \
-                  --title "${{ github.event.release.name }}" \
-                  --notes "${{ github.event.release.body }}" \
-                  --target "${{ github.event.release.target_commitish }}")
+                  --title "$RELEASE_NAME" \
+                  --notes "$RELEASE_BODY" \
+                  --target "$RELEASE_TARGET")
             if compgen -G "assets/*" > /dev/null; then
-              gh release create "${{ github.event.release.tag_name }}" "${args[@]}" assets/*
+              gh release create "$RELEASE_TAG" "${args[@]}" assets/*
             else
-              gh release create "${{ github.event.release.tag_name }}" "${args[@]}"
+              gh release create "$RELEASE_TAG" "${args[@]}"
             fi
           fi

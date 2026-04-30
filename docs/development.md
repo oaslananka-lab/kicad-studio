@@ -15,12 +15,15 @@ dependencies.
 ## Daily workflow
 
 ```bash
-task format      # auto-format
-task lint        # check formatting and linting
-task typecheck   # static types
-task test        # run tests
-task ci          # run the full CI pipeline locally
-task security    # run npm audit, gitleaks, and bundle-size checks
+task format:fix          # auto-format
+task lint                # check formatting and linting
+task typecheck           # static types
+task test:unit           # run fast unit tests
+task package             # build the VSIX
+task package:ls          # inspect packaged files
+task security:ci         # run CI-safe npm audit
+task security:local      # run npm audit, gitleaks, and bundle-size checks
+task ci                  # run the full CI pipeline locally
 ```
 
 ## Before push
@@ -29,8 +32,8 @@ task security    # run npm audit, gitleaks, and bundle-size checks
 If you want to be sure CI will pass:
 
 ```bash
-task ci          # full local parity with CI
-task ci:act      # optional: run GitHub Actions in Docker locally
+task pre-push            # fast pre-push gate
+task ci                  # full local parity with CI
 ```
 
 ## Troubleshooting

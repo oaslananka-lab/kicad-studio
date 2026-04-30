@@ -1,11 +1,47 @@
 name: Documentation
-description: Report missing or incorrect documentation
-labels: ['type:docs']
+description: Report missing, stale, or incorrect documentation
+labels: ['type:docs', 'area:docs', 'needs:triage']
 body:
   - type: textarea
     id: feedback
     attributes:
-      label: Documentation Feedback
-      description: What is missing or incorrect?
+      label: Documentation feedback
+      description: What is missing, incorrect, confusing, or stale?
     validations:
       required: true
+  - type: input
+    id: location
+    attributes:
+      label: Page or file
+      placeholder: 'README.md, docs/installation.md, Marketplace listing, ...'
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected documentation
+  - type: dropdown
+    id: risk
+    attributes:
+      label: Expected fix risk
+      options:
+        - risk:low
+        - risk:medium
+        - risk:high
+        - Not sure
+    validations:
+      required: true
+  - type: dropdown
+    id: automation
+    attributes:
+      label: May a coding agent work on this?
+      options:
+        - Yes, if maintainers label it agent:candidate
+        - No, human maintainer only
+        - Not sure
+    validations:
+      required: true
+  - type: textarea
+    id: done
+    attributes:
+      label: Done criteria

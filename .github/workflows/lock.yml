@@ -6,13 +6,19 @@ on:
   workflow_dispatch:
 
 permissions:
+  contents: read
   issues: write
   pull-requests: write
+
+concurrency:
+  group: lock-threads
+  cancel-in-progress: false
 
 jobs:
   lock:
     if: github.repository == 'oaslananka-lab/kicad-studio'
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     steps:
       - uses: dessant/lock-threads@7266a7ce5c1df01b1c6db85bf8cd86c737dadbe7
         with:
