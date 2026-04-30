@@ -3,16 +3,23 @@
 #
 # Examples:
 #   pwsh -ExecutionPolicy Bypass -File .\scripts\steward-pr-triage.ps1 -Repo helix
-#   pwsh -ExecutionPolicy Bypass -File .\scripts\steward-pr-triage.ps1 -Repo vscode-toon-tools
 #   pwsh -ExecutionPolicy Bypass -File .\scripts\steward-pr-triage.ps1 -All
 #
 # This script is read-only.
+#
+# Notes:
+# - Failed runs from closed/deleted PR branches are ignored by default.
+# - Active blockers include:
+#     - failed runs on main
+#     - failed runs on currently open PR branches
+# - Use -IncludeClosedPrFailures to show historical failures too.
 
 param(
     [string]$Org = "oaslananka-lab",
     [string]$Repo,
     [switch]$All,
-    [int]$Limit = 50
+    [int]$Limit = 50,
+    [switch]$IncludeClosedPrFailures
 )
 
 $ErrorActionPreference = "Continue"
@@ -64,6 +71,45 @@ function Get-CheckSummary {
     return "passed=$($passed.Count), pending=$($pending.Count), failed=$($failed.Count)"
 }
 
+function Get-Recommendation {
+    param($Pr, [string]$CheckSummary)
+
+    $titleLower = $Pr.title.ToLowerInvariant()
+
+    if ($Pr.isDraft) {
+        return "draft: wait or ask agent"
+    }
+
+    if ($CheckSummary -match "failed=[1-9]") {
+        return "needs CI fix"
+    }
+
+    if ($Pr.mergeStateStatus -eq "BEHIND") {
+        return "update branch/rebase"
+    }
+
+    if ($Pr.mergeStateStatus -eq "DIRTY") {
+        return "merge conflict: manual fix"
+    }
+
+    if ($Pr.mergeStateStatus -eq "BLOCKED") {
+        return "blocked: inspect required checks"
+    }
+
+    if (($Pr.mergeStateStatus -eq "CLEAN" -or $Pr.mergeStateStatus -eq "UNKNOWN") -and $CheckSummary -match "failed=0") {
+        if ($titleLower -match "bump|deps|dependabot") {
+            return "candidate: review then merge/automerge"
+        }
+        return "candidate: review"
+    }
+
+    if ($Pr.mergeStateStatus -eq "UNKNOWN") {
+        return "checks unknown: open PR"
+    }
+
+    return "inspect"
+}
+
 $Repos = Get-Repos
 $Report = @()
 
@@ -84,7 +130,13 @@ foreach ($R in $Repos) {
         continue
     }
 
-    $Prs = $PrsRaw | ConvertFrom-Json
+    $Prs = @($PrsRaw | ConvertFrom-Json)
+    $OpenPrBranches = @{}
+    foreach ($Pr in $Prs) {
+        if ($Pr.headRefName) {
+            $OpenPrBranches[$Pr.headRefName] = $true
+        }
+    }
 
     if (-not $Prs -or $Prs.Count -eq 0) {
         Write-Host "Open PRs: 0"
@@ -93,21 +145,7 @@ foreach ($R in $Repos) {
         foreach ($Pr in $Prs) {
             $labels = ($Pr.labels | ForEach-Object { $_.name }) -join ", "
             $checkSummary = Get-CheckSummary -Pr $Pr
-
-            $recommendation = "inspect"
-            $titleLower = $Pr.title.ToLowerInvariant()
-
-            if ($Pr.isDraft) {
-                $recommendation = "draft: wait or ask agent"
-            } elseif ($Pr.mergeStateStatus -eq "CLEAN" -and $checkSummary -match "failed=0" -and $titleLower -match "bump|deps|dependabot") {
-                $recommendation = "candidate: review then merge/automerge"
-            } elseif ($Pr.mergeStateStatus -eq "BEHIND") {
-                $recommendation = "update branch/rebase"
-            } elseif ($checkSummary -match "failed=[1-9]") {
-                $recommendation = "needs CI fix"
-            } elseif ($Pr.mergeStateStatus -eq "UNKNOWN") {
-                $recommendation = "checks unknown: open PR"
-            }
+            $recommendation = Get-Recommendation -Pr $Pr -CheckSummary $checkSummary
 
             Write-Host "  PR #$($Pr.number) [$($Pr.mergeStateStatus)] $($Pr.title)"
             Write-Host "    head: $($Pr.headRefName) -> $($Pr.baseRefName)"
@@ -119,6 +157,7 @@ foreach ($R in $Repos) {
 
             $Report += [pscustomobject]@{
                 repo = $FullName
+                kind = "open_pr"
                 number = $Pr.number
                 title = $Pr.title
                 head = $Pr.headRefName
@@ -136,22 +175,53 @@ foreach ($R in $Repos) {
 
     $RunsRaw = gh run list `
         --repo $FullName `
-        --limit 10 `
+        --limit 50 `
         --json databaseId,name,status,conclusion,headBranch,event,createdAt,url 2>$null
 
     if ($LASTEXITCODE -eq 0) {
-        $Runs = $RunsRaw | ConvertFrom-Json
-        $Failed = $Runs | Where-Object { $_.conclusion -eq "failure" -or $_.conclusion -eq "cancelled" }
+        $Runs = @($RunsRaw | ConvertFrom-Json)
+
+        $Failed = $Runs | Where-Object {
+            ($_.conclusion -eq "failure" -or $_.conclusion -eq "cancelled") -and (
+                $IncludeClosedPrFailures -or
+                $_.headBranch -eq "main" -or
+                $OpenPrBranches.ContainsKey($_.headBranch)
+            )
+        }
 
         if ($Failed.Count -gt 0) {
-            Write-Host "Recent failed/cancelled runs: $($Failed.Count)" -ForegroundColor Red
+            Write-Host "Active failed/cancelled runs: $($Failed.Count)" -ForegroundColor Red
             foreach ($Run in $Failed) {
                 Write-Host "  Run #$($Run.databaseId) [$($Run.conclusion)] $($Run.name) on $($Run.headBranch)"
                 Write-Host "    event=$($Run.event) created=$($Run.createdAt)"
                 Write-Host "    $($Run.url)"
+
+                $Report += [pscustomobject]@{
+                    repo = $FullName
+                    kind = "active_failed_run"
+                    runId = $Run.databaseId
+                    name = $Run.name
+                    conclusion = $Run.conclusion
+                    headBranch = $Run.headBranch
+                    event = $Run.event
+                    createdAt = $Run.createdAt
+                    url = $Run.url
+                }
             }
         } else {
-            Write-Host "Recent failed/cancelled runs: 0"
+            Write-Host "Active failed/cancelled runs: 0"
+        }
+
+        if (-not $IncludeClosedPrFailures) {
+            $Historical = $Runs | Where-Object {
+                ($_.conclusion -eq "failure" -or $_.conclusion -eq "cancelled") -and
+                $_.headBranch -ne "main" -and
+                -not $OpenPrBranches.ContainsKey($_.headBranch)
+            }
+
+            if ($Historical.Count -gt 0) {
+                Write-Host "Ignored historical failures from closed PR branches: $($Historical.Count)" -ForegroundColor DarkGray
+            }
         }
     }
 }
