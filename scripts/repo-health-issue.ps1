@@ -3,11 +3,10 @@
 #
 # Example:
 #   pwsh -ExecutionPolicy Bypass -File .\scripts\repo-health-issue.ps1 -Repo helix
-#
-# This is useful when a repo has accumulated failed runs / stale PRs.
 
 param(
     [string]$Org = "oaslananka-lab",
+
     [Parameter(Mandatory=$true)]
     [string]$Repo
 )
@@ -16,23 +15,34 @@ $ErrorActionPreference = "Stop"
 
 $FullName = "$Org/$Repo"
 
-$OpenPrs = gh pr list --repo $FullName --state open --limit 50 --json number,title,mergeStateStatus,url | ConvertFrom-Json
-$Runs = gh run list --repo $FullName --limit 20 --json databaseId,name,conclusion,headBranch,url | ConvertFrom-Json
-$FailedRuns = $Runs | Where-Object { $_.conclusion -eq "failure" -or $_.conclusion -eq "cancelled" }
+$OpenPrs = gh pr list `
+    --repo $FullName `
+    --state open `
+    --limit 50 `
+    --json number,title,mergeStateStatus,url | ConvertFrom-Json
+
+$Runs = gh run list `
+    --repo $FullName `
+    --limit 20 `
+    --json databaseId,name,conclusion,headBranch,url | ConvertFrom-Json
+
+$FailedRuns = $Runs | Where-Object {
+    $_.conclusion -eq "failure" -or $_.conclusion -eq "cancelled"
+}
 
 $Body = @()
 $Body += "# Repository Health Follow-up"
 $Body += ""
-$Body += "Automated health summary for `$FullName`."
+$Body += "Automated health summary for $FullName."
 $Body += ""
 $Body += "## Open PRs"
 $Body += ""
 
-if ($OpenPrs.Count -eq 0) {
+if (-not $OpenPrs -or $OpenPrs.Count -eq 0) {
     $Body += "- None"
 } else {
     foreach ($Pr in $OpenPrs) {
-        $Body += "- #$($Pr.number) [$($Pr.mergeStateStatus)] $($Pr.title)"
+        $Body += "- PR #$($Pr.number) [$($Pr.mergeStateStatus)] $($Pr.title)"
         $Body += "  - $($Pr.url)"
     }
 }
@@ -41,11 +51,11 @@ $Body += ""
 $Body += "## Recent failed or cancelled runs"
 $Body += ""
 
-if ($FailedRuns.Count -eq 0) {
+if (-not $FailedRuns -or $FailedRuns.Count -eq 0) {
     $Body += "- None"
 } else {
     foreach ($Run in $FailedRuns) {
-        $Body += "- Run #$($Run.databaseId): $($Run.name) on `$($Run.headBranch)`"
+        $Body += "- Run #$($Run.databaseId): $($Run.name) on $($Run.headBranch)"
         $Body += "  - $($Run.url)"
     }
 }
