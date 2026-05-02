@@ -13,8 +13,14 @@ export function resolveKiCadExecutable(filePath: string): { command: string; arg
 
   const candidates = getKiCadExecutableCandidates(filePath, configured);
   for (const candidate of candidates) {
-    if (candidate && fs.existsSync(candidate)) {
-      return { command: candidate, args: [] };
+    if (candidate) {
+      if (candidate.startsWith('flatpak run')) {
+        const parts = candidate.split(' ');
+        return { command: parts[0], args: parts.slice(1) };
+      }
+      if (fs.existsSync(candidate)) {
+        return { command: candidate, args: [] };
+      }
     }
   }
 
@@ -81,6 +87,7 @@ function getKiCadExecutableCandidates(filePath: string, configured: string): str
         path.join('/snap/bin', name)
       );
     }
+    candidates.push('flatpak run org.kicad.KiCad');
   }
 
   return [...new Set(candidates)];

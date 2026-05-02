@@ -7,6 +7,7 @@ export interface SettingsViewState {
   octopartKeyStored: boolean;
   cli?: {
     path: string;
+    args?: string[] | undefined;
     versionLabel: string;
     source: string;
   };
@@ -373,8 +374,18 @@ export function buildSettingsHtml(options: SettingsHtmlOptions): string {
       byId('ai-key-status').textContent = state.aiKeyStored ? 'AI API key is stored in SecretStorage.' : 'No AI API key is stored.';
       byId('octopart-key-status').textContent = state.octopartKeyStored ? 'Octopart/Nexar key is stored in SecretStorage.' : 'No Octopart/Nexar key is stored.';
       const cli = state.cli;
-      byId('cli-status').textContent = cli ? cli.versionLabel + ' at ' + cli.path + ' (' + cli.source + ')' : 'No kicad-cli detection result yet.';
-      byId('summary').textContent = (state.aiKeyStored ? 'AI key stored' : 'AI key missing') + ' - ' + (cli ? cli.versionLabel : 'CLI not detected');
+      if (cli) {
+        const fullCommand =
+          (cli.args ? cli.path + ' ' + cli.args.join(' ') : cli.path) + ' ';
+        byId('cli-status').textContent =
+          cli.versionLabel + ' at ' + fullCommand + ' (' + cli.source + ')';
+      } else {
+        byId('cli-status').textContent = 'No kicad-cli detection result yet.';
+      }
+      byId('summary').textContent =
+        (state.aiKeyStored ? 'AI key stored' : 'AI key missing') +
+        ' - ' +
+        (cli ? cli.versionLabel : 'CLI not detected');
     }
     function postSetting(input) {
       const key = input.dataset.setting;

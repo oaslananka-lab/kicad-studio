@@ -243,6 +243,7 @@ export class KiCadSettingsPanel implements vscode.Disposable {
     if (snapshot.cli) {
       state.cli = {
         path: snapshot.cli.path,
+        args: snapshot.cli.args,
         versionLabel: snapshot.cli.versionLabel,
         source: snapshot.cli.source
       };
