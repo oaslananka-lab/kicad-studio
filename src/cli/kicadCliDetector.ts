@@ -5,6 +5,7 @@ import { spawnSync } from 'node:child_process';
 import * as vscode from 'vscode';
 import { CLI_CAPABILITY_COMMANDS, SETTINGS } from '../constants';
 import type { DetectedKiCadCli } from '../types';
+import { findExecutableOnPath } from '../utils/pathUtils';
 
 export function getCliCandidates(
   platform = process.platform,
@@ -101,6 +102,19 @@ export class KiCadCliDetector {
       .trim();
     this.warnIfWorkspaceConfiguredPath(configuredPath);
 
+    if (
+      configuredPath === 'flatpak' ||
+      configuredPath.includes('flatpak run') ||
+      configuredPath.includes('org.kicad.KiCad')
+    ) {
+      const flatpakPath = findExecutableOnPath('flatpak') || 'flatpak';
+      const resolved = await this.validateFlatpak(flatpakPath, 'settings');
+      if (resolved) {
+        this.detected = resolved;
+        return resolved;
+      }
+    }
+
     const candidates = getCliCandidates(process.platform, configuredPath);
     for (const candidate of candidates) {
       const resolved = await this.validateCandidate(
@@ -110,6 +124,17 @@ export class KiCadCliDetector {
       if (resolved) {
         this.detected = resolved;
         return resolved;
+      }
+    }
+
+    if (process.platform === 'linux') {
+      const flatpakPath = findExecutableOnPath('flatpak');
+      if (flatpakPath) {
+        const resolved = await this.validateFlatpak(flatpakPath, 'flatpak');
+        if (resolved) {
+          this.detected = resolved;
+          return resolved;
+        }
       }
     }
 
@@ -164,6 +189,10 @@ export class KiCadCliDetector {
       Number.parseInt(this.detected.version.split('.')[0] ?? '', 10) ||
       undefined
     );
+  }
+
+  getDetected(): DetectedKiCadCli | undefined {
+    return this.detected;
   }
 
   async hasCapability(
@@ -254,15 +283,31 @@ export class KiCadCliDetector {
   }
 
   private findOnPath(): string | undefined {
-    const finder = process.platform === 'win32' ? 'where' : 'which';
-    const result = spawnSync(finder, ['kicad-cli'], { encoding: 'utf8' });
+    return findExecutableOnPath('kicad-cli');
+  }
+
+  private async validateFlatpak(
+    flatpakPath: string,
+    source: DetectedKiCadCli['source']
+  ): Promise<DetectedKiCadCli | undefined> {
+    const result = spawnSync(flatpakPath, ['run', '--command=kicad-cli', 'org.kicad.KiCad', '--version'], {
+      encoding: 'utf8'
+    });
     if (result.status !== 0) {
       return undefined;
     }
-    return result.stdout
-      .split(/\r?\n/)
-      .map((line) => line.trim())
-      .find(Boolean);
+
+    const output = `${result.stdout}\n${result.stderr}`.trim();
+    const versionMatch = output.match(/(\d+\.\d+(?:\.\d+)?)/);
+    const version = versionMatch?.[1] ?? 'unknown';
+
+    return {
+      path: flatpakPath,
+      args: ['run', '--command=kicad-cli', 'org.kicad.KiCad'],
+      version,
+      versionLabel: `KiCad ${version} (Flatpak)`,
+      source
+    };
   }
 
   private normalizeCandidate(candidate: string): string {

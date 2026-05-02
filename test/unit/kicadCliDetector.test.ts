@@ -22,12 +22,19 @@ import {
   getCliCandidates,
   KiCadCliDetector
 } from '../../src/cli/kicadCliDetector';
+import * as pathUtils from '../../src/utils/pathUtils';
 
 describe('KiCadCliDetector', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     __setConfiguration({
       'kicadstudio.kicadCliPath': 'C:\\KiCad\\bin\\kicad-cli.exe'
+    });
+    // Default mock for spawnSync to avoid "status of undefined"
+    (childProcess.spawnSync as jest.Mock).mockReturnValue({
+      status: 1,
+      stdout: '',
+      stderr: ''
     });
   });
 
@@ -62,7 +69,7 @@ describe('KiCadCliDetector', () => {
             }
           : undefined
       );
-    detector.findOnPath = jest.fn().mockReturnValue('/usr/bin/kicad-cli');
+    jest.spyOn(pathUtils, 'findExecutableOnPath').mockReturnValue('/usr/bin/kicad-cli');
 
     const result = await detector.detect();
     expect(result?.source).toBe('path');
@@ -85,7 +92,7 @@ describe('KiCadCliDetector', () => {
             }
           : undefined
       );
-    detector.findOnPath = jest.fn().mockReturnValue('/usr/bin/kicad-cli');
+    jest.spyOn(pathUtils, 'findExecutableOnPath').mockReturnValue('/usr/bin/kicad-cli');
 
     const detected = await detector.detect();
 
@@ -98,10 +105,60 @@ describe('KiCadCliDetector', () => {
   it('returns null when not found', async () => {
     const detector = new KiCadCliDetector() as any;
     detector.validateCandidate = jest.fn().mockResolvedValue(undefined);
-    detector.findOnPath = jest.fn().mockReturnValue(undefined);
+    jest.spyOn(pathUtils, 'findExecutableOnPath').mockReturnValue(undefined);
 
     const result = await detector.detect();
     expect(result).toBeUndefined();
+  });
+
+  it('detects flatpak from settings', async () => {
+    __setConfiguration({
+      'kicadstudio.kicadCliPath': 'flatpak'
+    });
+    const detector = new KiCadCliDetector() as any;
+    jest.spyOn(pathUtils, 'findExecutableOnPath').mockReturnValue('/usr/bin/flatpak');
+    detector.validateFlatpak = jest.fn().mockResolvedValue({
+      path: '/usr/bin/flatpak',
+      args: ['run', '--command=kicad-cli', 'org.kicad.KiCad'],
+      version: '10.0.1',
+      versionLabel: 'KiCad 10.0.1 (Flatpak)',
+      source: 'settings'
+    });
+
+    const result = await detector.detect();
+    expect(result?.source).toBe('settings');
+    expect(result?.args).toContain('org.kicad.KiCad');
+  });
+
+  it('auto-detects flatpak on linux', async () => {
+    __setConfiguration({
+      'kicadstudio.kicadCliPath': ''
+    });
+    const detector = new KiCadCliDetector() as any;
+    // Mock platform to linux
+    const originalPlatform = process.platform;
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+
+    detector.validateCandidate = jest.fn().mockResolvedValue(undefined);
+    jest.spyOn(pathUtils, 'findExecutableOnPath').mockImplementation((name: string) => {
+      if (name === 'flatpak') { return '/usr/bin/flatpak'; }
+      return undefined;
+    });
+    detector.validateFlatpak = jest.fn().mockResolvedValue({
+      path: '/usr/bin/flatpak',
+      args: ['run', '--command=kicad-cli', 'org.kicad.KiCad'],
+      version: '10.0.1',
+      versionLabel: 'KiCad 10.0.1 (Flatpak)',
+      source: 'flatpak'
+    });
+
+    try {
+      const result = await detector.detect();
+      expect(result?.source).toBe('flatpak');
+      expect(result?.args).toContain('org.kicad.KiCad');
+    } finally {
+      Object.defineProperty(process, 'platform', { value: originalPlatform });
+    }
   });
 
   it('builds candidate paths by platform', () => {
@@ -249,17 +306,8 @@ describe('KiCadCliDetector', () => {
 
   it('parses PATH lookup results and opens settings when requested', async () => {
     const detector = new KiCadCliDetector() as any;
-    const spawnSyncMock = childProcess.spawnSync as unknown as jest.Mock;
-    spawnSyncMock.mockReturnValue({
-      status: 0,
-      stdout: 'C:\\KiCad\\bin\\kicad-cli.exe\r\n',
-      stderr: ''
-    } as never);
-
-    expect(detector.findOnPath()).toBe('C:\\KiCad\\bin\\kicad-cli.exe');
-
     detector.validateCandidate = jest.fn().mockResolvedValue(undefined);
-    detector.findOnPath = jest.fn().mockReturnValue(undefined);
+    jest.spyOn(pathUtils, 'findExecutableOnPath').mockReturnValue(undefined);
     (vscode.window.showErrorMessage as jest.Mock).mockResolvedValue(
       'Set Manual Path'
     );
@@ -297,7 +345,8 @@ describe('KiCadCliDetector', () => {
     await expect(
       detector.validateCandidate('C:\\missing\\kicad-cli.exe', 'settings')
     ).resolves.toBeUndefined();
-    expect(detector.findOnPath()).toBeUndefined();
+    jest.spyOn(pathUtils, 'findExecutableOnPath').mockReturnValue(undefined);
+    expect(pathUtils.findExecutableOnPath('kicad-cli')).toBeUndefined();
   });
 
   it('falls back to normalized candidates when realpath fails and warns once for workspace overrides', () => {
@@ -334,5 +383,23 @@ describe('KiCadCliDetector', () => {
     } finally {
       (vscode.workspace as any).getConfiguration = originalGetConfiguration;
     }
+  });
+
+  it('validates flatpak and returns expected results', async () => {
+    const detector = new KiCadCliDetector() as any;
+    const spawnSyncMock = childProcess.spawnSync as unknown as jest.Mock;
+    spawnSyncMock.mockReturnValue({
+      status: 0,
+      stdout: 'kicad-cli 10.0.1',
+      stderr: ''
+    });
+
+    const result = await detector.validateFlatpak('/usr/bin/flatpak', 'flatpak');
+    expect(result).toEqual(expect.objectContaining({
+      path: '/usr/bin/flatpak',
+      args: ['run', '--command=kicad-cli', 'org.kicad.KiCad'],
+      version: '10.0.1',
+      source: 'flatpak'
+    }));
   });
 });

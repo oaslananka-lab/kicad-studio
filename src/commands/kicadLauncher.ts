@@ -3,6 +3,7 @@ import * as fs from 'node:fs';
 import * as path from 'node:path';
 import * as vscode from 'vscode';
 import { SETTINGS } from '../constants';
+import { findExecutableOnPath } from '../utils/pathUtils';
 
 /**
  * Resolve the KiCad GUI executable for a given file type. Checks configured
@@ -10,6 +11,15 @@ import { SETTINGS } from '../constants';
  */
 export function resolveKiCadExecutable(filePath: string): { command: string; args: string[] } {
   const configured = vscode.workspace.getConfiguration().get<string>(SETTINGS.kicadPath, '').trim();
+
+  if (
+    configured === 'flatpak' ||
+    configured.includes('flatpak run') ||
+    configured.includes('org.kicad.KiCad')
+  ) {
+    const flatpak = findExecutableOnPath('flatpak') || 'flatpak';
+    return { command: flatpak, args: ['run', 'org.kicad.KiCad'] };
+  }
 
   const candidates = getKiCadExecutableCandidates(filePath, configured);
   for (const candidate of candidates) {
@@ -22,6 +32,16 @@ export function resolveKiCadExecutable(filePath: string): { command: string; arg
     const fromPath = findExecutableOnPath(name);
     if (fromPath) {
       return { command: fromPath, args: [] };
+    }
+  }
+
+  if (process.platform === 'linux') {
+    const flatpak = findExecutableOnPath('flatpak');
+    if (flatpak) {
+      const result = spawnSync(flatpak, ['run', 'org.kicad.KiCad', '--version'], { encoding: 'utf8' });
+      if (result.status === 0) {
+        return { command: flatpak, args: ['run', 'org.kicad.KiCad'] };
+      }
     }
   }
 
@@ -123,14 +143,3 @@ function getPreferredKiCadExecutableNames(filePath: string): string[] {
   return ['kicad'];
 }
 
-function findExecutableOnPath(name: string): string | undefined {
-  const finder = process.platform === 'win32' ? 'where' : 'which';
-  const result = spawnSync(finder, [name], { encoding: 'utf8' });
-  if (result.status !== 0) {
-    return undefined;
-  }
-  return result.stdout
-    .split(/\r?\n/)
-    .map((line) => line.trim())
-    .find(Boolean);
-}

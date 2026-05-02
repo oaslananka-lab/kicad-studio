@@ -1,10 +1,14 @@
 import * as vscode from 'vscode';
 import { buildCliExportCommands, type ExportCommandKind } from '../cli/exportCommands';
+import type { KiCadCliDetector } from '../cli/kicadCliDetector';
 import { SETTINGS } from '../constants';
 import type { KiCadTaskDefinition } from '../types';
 
 export class KiCadTaskProvider implements vscode.TaskProvider {
+  constructor(private readonly cliDetector: KiCadCliDetector) {}
+
   async provideTasks(): Promise<vscode.Task[]> {
+    await this.cliDetector.detect();
     const tasks: vscode.Task[] = [];
     const pcbFiles = await vscode.workspace.findFiles('**/*.kicad_pcb', '**/node_modules/**', 5);
     const schFiles = await vscode.workspace.findFiles('**/*.kicad_sch', '**/node_modules/**', 5);
@@ -28,10 +32,19 @@ export class KiCadTaskProvider implements vscode.TaskProvider {
     const outputDir =
       definition.outputDir ??
       vscode.workspace.getConfiguration().get<string>(SETTINGS.outputDir, 'fab');
-    const cliPath =
-      vscode.workspace.getConfiguration().get<string>(SETTINGS.cliPath, '') || 'kicad-cli';
+
+    const cli = vscode.workspace.getConfiguration().get<string>(SETTINGS.cliPath, '');
     const args = this.buildArgs(definition.task, definition.file, outputDir);
-    const execution = new vscode.ProcessExecution(cliPath, args);
+
+    let execution: vscode.ProcessExecution;
+    const detected = this.cliDetector.getDetected();
+
+    if (detected?.args?.length) {
+      execution = new vscode.ProcessExecution(detected.path, [...detected.args, ...args]);
+    } else {
+      execution = new vscode.ProcessExecution(cli || 'kicad-cli', args);
+    }
+
     return new vscode.Task(
       definition,
       vscode.TaskScope.Workspace,
