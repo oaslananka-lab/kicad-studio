@@ -122,6 +122,12 @@ export class KiCadCliDetector {
       }
     }
 
+    const flatpak = await this.detectFlatpak();
+    if (flatpak) {
+      this.detected = flatpak;
+      return flatpak;
+    }
+
     if (notifyOnMissing) {
       const selected = await vscode.window.showErrorMessage(
         'KiCad CLI (kicad-cli) was not found.',
@@ -263,6 +269,49 @@ export class KiCadCliDetector {
       .split(/\r?\n/)
       .map((line) => line.trim())
       .find(Boolean);
+  }
+
+  private async detectFlatpak(): Promise<DetectedKiCadCli | undefined> {
+    if (process.platform !== 'linux') {
+      return undefined;
+    }
+
+    const flatpakPathResult = spawnSync('which', ['flatpak'], {
+      encoding: 'utf8'
+    });
+    const flatpakPath = flatpakPathResult?.stdout?.trim();
+    if (!flatpakPath) {
+      return undefined;
+    }
+
+    const listResult = spawnSync('flatpak', ['list', '--ids'], {
+      encoding: 'utf8'
+    });
+    const list = listResult?.stdout?.toString();
+    if (!list || !list.includes('org.kicad.KiCad')) {
+      return undefined;
+    }
+
+    const result = spawnSync(
+      'flatpak',
+      ['run', '--command=kicad-cli', 'org.kicad.KiCad', '--version'],
+      { encoding: 'utf8' }
+    );
+    if (result.status !== 0) {
+      return undefined;
+    }
+
+    const output = `${result.stdout}\n${result.stderr}`.trim();
+    const versionMatch = output.match(/(\d+\.\d+(?:\.\d+)?)/);
+    const version = versionMatch?.[1] ?? 'unknown';
+
+    return {
+      path: 'flatpak',
+      version,
+      versionLabel: `KiCad ${version} (Flatpak)`,
+      source: 'flatpak',
+      flatpakArgs: ['run', '--command=kicad-cli', 'org.kicad.KiCad']
+    };
   }
 
   private normalizeCandidate(candidate: string): string {

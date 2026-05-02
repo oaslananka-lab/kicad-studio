@@ -335,4 +335,39 @@ describe('KiCadCliDetector', () => {
       (vscode.workspace as any).getConfiguration = originalGetConfiguration;
     }
   });
+
+  it('detects KiCad from Flatpak when common paths fail', async () => {
+    const detector = new KiCadCliDetector() as any;
+    const spawnSyncMock = childProcess.spawnSync as unknown as jest.Mock;
+
+    Object.defineProperty(process, 'platform', { value: 'linux' });
+
+    spawnSyncMock.mockImplementation((cmd: string, args: string[]) => {
+      if (cmd === 'which' && args[0] === 'flatpak') {
+        return { status: 0, stdout: '/usr/bin/flatpak' };
+      }
+      if (cmd === 'flatpak' && args[0] === 'list') {
+        return { status: 0, stdout: 'org.kicad.KiCad' };
+      }
+      if (cmd === 'flatpak' && args[0] === 'run') {
+        return { status: 0, stdout: '9.0.5' };
+      }
+      if (cmd === 'which' && args[0] === 'kicad-cli') {
+        return { status: 1, stdout: '' };
+      }
+      return { status: 1, stdout: '' };
+    });
+
+    detector.validateCandidate = jest.fn().mockResolvedValue(undefined);
+
+    const result = await detector.detect();
+
+    expect(result?.source).toBe('flatpak');
+    expect(result?.version).toBe('9.0.5');
+    expect(result?.flatpakArgs).toEqual([
+      'run',
+      '--command=kicad-cli',
+      'org.kicad.KiCad'
+    ]);
+  });
 });
