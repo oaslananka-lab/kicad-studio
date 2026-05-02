@@ -69,8 +69,8 @@ export class KiCadTaskProvider implements vscode.TaskProvider {
 
     const detected = await this.detector?.detect();
     const cliPath =
-      detected?.path ??
-      vscode.workspace.getConfiguration().get<string>(SETTINGS.cliPath, '') ||
+      (detected?.path ??
+        vscode.workspace.getConfiguration().get<string>(SETTINGS.cliPath, '')) ||
       'kicad-cli';
 
     const baseArgs = this.buildArgs(definition.task, definition.file, outputDir);
