@@ -233,7 +233,7 @@ export async function activate(
       getTreeItem: (element: vscode.TreeItem) => element,
       getChildren: () => []
     }),
-    vscode.tasks.registerTaskProvider('kicad', new KiCadTaskProvider()),
+    vscode.tasks.registerTaskProvider('kicad', new KiCadTaskProvider(cliDetector)),
     // Wire schematic viewer activation → BOM refresh so the BOM panel updates
     // when a .kicad_sch file is opened in the custom viewer (webview), not just
     // when it is the active text editor.

@@ -94,6 +94,49 @@ describe('KiCadCliRunner', () => {
     expect(detector.detect).toHaveBeenCalled();
   });
 
+  it('prepends flatpak args when detected', async () => {
+    const boardFile = path.join(tempDir, 'sample.kicad_pcb');
+    fs.writeFileSync(boardFile, '', 'utf8');
+    __setConfiguration({});
+
+    const detector = {
+      detect: jest.fn().mockResolvedValue({
+        path: '/usr/bin/flatpak',
+        args: ['run', '--command=kicad-cli', 'org.kicad.KiCad'],
+        version: '10.0.1',
+        versionLabel: 'KiCad 10.0.1 (Flatpak)',
+        source: 'flatpak'
+      })
+    };
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+    const spawnMock = childProcess.spawn as unknown as jest.Mock;
+    spawnMock.mockImplementation((command: string, args: string[]) => {
+      const child = createChildProcessMock();
+      queueMicrotask(() => {
+        child.stdout.emit('data', Buffer.from('ok'));
+        child.emit('close', 0);
+      });
+      expect(command).toBe('/usr/bin/flatpak');
+      expect(args.slice(0, 3)).toEqual(['run', '--command=kicad-cli', 'org.kicad.KiCad']);
+      expect(args.slice(3)).toEqual(['pcb', 'drc', boardFile]);
+      return child;
+    });
+
+    const runner = new KiCadCliRunner(detector as never, logger as never);
+    const result = await runner.run({
+      command: ['pcb', 'drc', boardFile],
+      cwd: tempDir,
+      progressTitle: 'DRC'
+    });
+
+    expect(result.exitCode).toBe(0);
+  });
+
   it('raises CliExitError when kicad-cli exits non-zero', async () => {
     __setConfiguration({});
     const detector = {

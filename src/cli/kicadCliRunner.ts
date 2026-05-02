@@ -94,14 +94,15 @@ export class KiCadCliRunner {
       options.command,
       options.cwd
     );
+    const fullArgs = [...(detected.args ?? []), ...command];
     const controller = new AbortController();
     const signal = composeAbortSignals(options.signal, controller.signal);
     this.controllers.add(controller);
     const startedAt = Date.now();
-    this.logger.info(`Running ${detected.path} ${command.join(' ')}`);
+    this.logger.info(`Running ${detected.path} ${fullArgs.join(' ')}`);
 
     return new Promise<CliResult<T>>((resolve, reject) => {
-      const child = spawn(detected.path, command, {
+      const child = spawn(detected.path, fullArgs, {
         cwd: options.cwd,
         env: process.env,
         signal,

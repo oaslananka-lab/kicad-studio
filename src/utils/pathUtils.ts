@@ -1,3 +1,4 @@
+import { spawnSync } from 'node:child_process';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
@@ -67,4 +68,16 @@ export async function findFirstWorkspaceFile(
 ): Promise<string | undefined> {
   const files = await vscode.workspace.findFiles(pattern, exclude, 1);
   return files[0]?.fsPath;
+}
+
+export function findExecutableOnPath(name: string): string | undefined {
+  const finder = process.platform === 'win32' ? 'where' : 'which';
+  const result = spawnSync(finder, [name], { encoding: 'utf8' });
+  if (result.status !== 0) {
+    return undefined;
+  }
+  return result.stdout
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(Boolean);
 }
