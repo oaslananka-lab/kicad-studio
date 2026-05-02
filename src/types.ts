@@ -31,7 +31,8 @@ export interface DetectedKiCadCli {
   path: string;
   version: string;
   versionLabel: string;
-  source: 'settings' | 'common-path' | 'path';
+  source: 'settings' | 'common-path' | 'path' | 'flatpak';
+  flatpakArgs?: string[];
 }
 
 export interface ViewerState {

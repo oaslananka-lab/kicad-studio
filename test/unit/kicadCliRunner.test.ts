@@ -534,4 +534,47 @@ describe('KiCadCliRunner', () => {
 
     await expect(pending).rejects.toThrow('KiCad commands cancelled.');
   });
+
+  it('uses flatpak arguments when the detected cli is flatpak', async () => {
+    __setConfiguration({});
+    const detector = {
+      detect: jest.fn().mockResolvedValue({
+        path: 'flatpak',
+        version: '9.0.5',
+        versionLabel: 'KiCad 9.0.5 (Flatpak)',
+        source: 'flatpak',
+        flatpakArgs: ['run', '--command=kicad-cli', 'org.kicad.KiCad']
+      })
+    };
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+    const spawnMock = childProcess.spawn as unknown as jest.Mock;
+    spawnMock.mockImplementation((executable: string, args: string[]) => {
+      expect(executable).toBe('flatpak');
+      expect(args[0]).toBe('run');
+      expect(args[1]).toBe('--command=kicad-cli');
+      expect(args[2]).toBe('org.kicad.KiCad');
+      expect(args[3]).toBe('pcb');
+      expect(args[4]).toBe('drc');
+
+      const child = createChildProcessMock();
+      queueMicrotask(() => {
+        child.emit('close', 0);
+      });
+      return child;
+    });
+
+    const runner = new KiCadCliRunner(detector as never, logger as never);
+    await runner.run({
+      command: ['pcb', 'drc', 'board.kicad_pcb'],
+      cwd: tempDir,
+      progressTitle: 'DRC'
+    });
+
+    expect(spawnMock).toHaveBeenCalled();
+  });
 });
