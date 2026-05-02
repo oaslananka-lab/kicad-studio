@@ -29,9 +29,10 @@ export interface CliResult<T = unknown> {
 
 export interface DetectedKiCadCli {
   path: string;
+  args?: string[] | undefined;
   version: string;
   versionLabel: string;
-  source: 'settings' | 'common-path' | 'path';
+  source: 'settings' | 'common-path' | 'path' | 'flatpak';
 }
 
 export interface ViewerState {

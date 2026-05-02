@@ -335,4 +335,36 @@ describe('KiCadCliDetector', () => {
       (vscode.workspace as any).getConfiguration = originalGetConfiguration;
     }
   });
+
+  it('detects and parses flatpak command candidates', async () => {
+    const detector = new KiCadCliDetector() as any;
+    const spawnSyncMock = childProcess.spawnSync as unknown as jest.Mock;
+
+    spawnSyncMock.mockImplementation((cmd, args) => {
+      if (cmd === 'flatpak' && args.includes('--version')) {
+        return {
+          status: 0,
+          stdout: 'kicad-cli 10.0.1',
+          stderr: ''
+        };
+      }
+      return { status: 1 };
+    });
+
+    const result = await detector.validateCandidate(
+      'flatpak run --command=kicad-cli org.kicad.KiCad',
+      'common-path'
+    );
+
+    expect(result).toBeDefined();
+    expect(result.path).toBe('flatpak');
+    expect(result.args).toEqual(['run', '--command=kicad-cli', 'org.kicad.KiCad']);
+    expect(result.version).toBe('10.0.1');
+    expect(result.source).toBe('flatpak');
+  });
+
+  it('includes flatpak candidate on Linux', () => {
+    const candidates = getCliCandidates('linux');
+    expect(candidates).toContain('flatpak run --command=kicad-cli org.kicad.KiCad');
+  });
 });

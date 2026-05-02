@@ -77,7 +77,8 @@ export function getCliCandidates(
         'data',
         'bin',
         'kicad-cli'
-      )
+      ),
+      'flatpak run --command=kicad-cli org.kicad.KiCad'
     );
   }
 
@@ -178,7 +179,11 @@ export class KiCadCliDetector {
       return this.capabilityCache.get(command) ?? false;
     }
 
-    const args = [...CLI_CAPABILITY_COMMANDS[command], '--help'];
+    const args = [
+      ...(detected.args ?? []),
+      ...CLI_CAPABILITY_COMMANDS[command],
+      '--help'
+    ];
     const result = spawnSync(detected.path, args, { encoding: 'utf8' });
     const supported =
       result.status === 0 ||
@@ -208,9 +213,13 @@ export class KiCadCliDetector {
       return this.helpCache.get(key);
     }
 
-    const result = spawnSync(detected.path, [...command, '--help'], {
-      encoding: 'utf8'
-    });
+    const result = spawnSync(
+      detected.path,
+      [...(detected.args ?? []), ...command, '--help'],
+      {
+        encoding: 'utf8'
+      }
+    );
     const help = `${result.stdout}\n${result.stderr}`;
     const supported = result.status === 0 || /Usage:/i.test(help);
     const normalized = supported ? help : undefined;
@@ -226,12 +235,17 @@ export class KiCadCliDetector {
       return undefined;
     }
 
-    const resolvedCandidate = this.normalizeCandidate(candidate);
-    if (!fs.existsSync(resolvedCandidate)) {
+    const isCommand = candidate.startsWith('flatpak run');
+    const resolvedCandidate = isCommand
+      ? 'flatpak'
+      : this.normalizeCandidate(candidate);
+    const baseArgs = isCommand ? candidate.split(' ').slice(1) : [];
+
+    if (!isCommand && !fs.existsSync(resolvedCandidate)) {
       return undefined;
     }
 
-    const result = spawnSync(resolvedCandidate, ['--version'], {
+    const result = spawnSync(resolvedCandidate, [...baseArgs, '--version'], {
       encoding: 'utf8'
     });
     if (result.status !== 0) {
@@ -247,9 +261,10 @@ export class KiCadCliDetector {
     const version = versionMatch?.[1] ?? 'unknown';
     return {
       path: resolvedCandidate,
+      args: baseArgs.length ? baseArgs : undefined,
       version,
       versionLabel: `KiCad ${version}`,
-      source
+      source: isCommand ? 'flatpak' : source
     };
   }
 
@@ -277,7 +292,8 @@ export class KiCadCliDetector {
   private looksLikeKiCadCli(versionOutput: string, candidate: string): boolean {
     return (
       /\bkicad(?:-cli)?\b/i.test(versionOutput) ||
-      /kicad-cli(?:\.exe)?$/i.test(path.basename(candidate))
+      /kicad-cli(?:\.exe)?$/i.test(path.basename(candidate)) ||
+      candidate === 'flatpak'
     );
   }
 
