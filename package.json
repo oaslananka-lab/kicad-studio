@@ -1057,7 +1057,37 @@
         "kicadstudio.kicadCliPath": {
           "type": "string",
           "default": "",
-          "description": "Path to kicad-cli executable. Leave empty for auto-detection."
+          "description": "Path to a kicad-cli executable. Leave empty for auto-detection. Use kicadstudio.kicadCliCommand for launchers that need arguments, such as KiCad Flatpak."
+        },
+        "kicadstudio.kicadCliCommand": {
+          "type": "object",
+          "default": {},
+          "description": "Structured kicad-cli command launcher. Use this when kicad-cli must be invoked through another executable, such as Flatpak. The command is executed without a shell.",
+          "properties": {
+            "command": {
+              "type": "string",
+              "description": "Executable to launch, for example flatpak."
+            },
+            "args": {
+              "type": "array",
+              "description": "Arguments to prepend before KiCad Studio's kicad-cli subcommand arguments.",
+              "items": {
+                "type": "string"
+              },
+              "default": []
+            }
+          },
+          "additionalProperties": false,
+          "examples": [
+            {
+              "command": "flatpak",
+              "args": [
+                "run",
+                "--command=kicad-cli",
+                "org.kicad.KiCad"
+              ]
+            }
+          ]
         },
         "kicadstudio.kicadPath": {
           "type": "string",

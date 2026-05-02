@@ -94,14 +94,16 @@ export class KiCadCliRunner {
       options.command,
       options.cwd
     );
+    const spawnArgs = [...(detected.args ?? []), ...command];
+    const displayCommand = [detected.path, ...spawnArgs].join(' ');
     const controller = new AbortController();
     const signal = composeAbortSignals(options.signal, controller.signal);
     this.controllers.add(controller);
     const startedAt = Date.now();
-    this.logger.info(`Running ${detected.path} ${command.join(' ')}`);
+    this.logger.info(`Running ${displayCommand}`);
 
     return new Promise<CliResult<T>>((resolve, reject) => {
-      const child = spawn(detected.path, command, {
+      const child = spawn(detected.path, spawnArgs, {
         cwd: options.cwd,
         env: process.env,
         signal,
@@ -117,7 +119,7 @@ export class KiCadCliRunner {
       let truncatedOutputBytes = 0;
       const timeout = setTimeout(() => {
         controller.abort(
-          new KiCadCliTimeoutError(command.join(' '), CLI_TIMEOUT_MS)
+          new KiCadCliTimeoutError(displayCommand, CLI_TIMEOUT_MS)
         );
       }, CLI_TIMEOUT_MS);
 
@@ -172,9 +174,7 @@ export class KiCadCliRunner {
       });
 
       child.on('error', (error) => {
-        finish(() =>
-          reject(this.normalizeError(error, options.command.join(' ')))
-        );
+        finish(() => reject(this.normalizeError(error, displayCommand)));
       });
 
       child.on('close', (exitCode) => {
@@ -193,7 +193,7 @@ export class KiCadCliRunner {
           if ((exitCode ?? -1) !== 0) {
             reject(
               new CliExitError({
-                command: command.join(' '),
+                command: displayCommand,
                 code: exitCode ?? -1,
                 stdout,
                 stderr: this.normalizeCliFailure(stderr || stdout || '')

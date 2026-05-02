@@ -31,6 +31,33 @@ The extension checks:
 - `/usr/local/bin/kicad-cli`
 - `/snap/bin/kicad-cli`
 - `~/.local/bin/kicad-cli`
+- KiCad Flatpak through `flatpak run --command=kicad-cli org.kicad.KiCad`
+
+### Linux Flatpak
+
+If KiCad is installed through Flatpak, configure the structured launcher instead
+of putting the full command into `kicadstudio.kicadCliPath`. The launcher is
+executed as an executable plus an argument array, without a shell:
+
+```json
+{
+  "kicadstudio.kicadCliCommand": {
+    "command": "flatpak",
+    "args": ["run", "--command=kicad-cli", "org.kicad.KiCad"]
+  }
+}
+```
+
+Verify the same command works in a terminal:
+
+```bash
+flatpak run --command=kicad-cli org.kicad.KiCad version
+```
+
+Use `kicadstudio.kicadCliPath` only for a direct executable path such as
+`/usr/bin/kicad-cli`, `/snap/bin/kicad-cli`, or a Windows `.exe` path. Do not put
+shell metacharacters, environment assignments, pipes, redirects, or a full
+command line into `kicadstudio.kicadCliPath`.
 
 ## MCP Setup
 

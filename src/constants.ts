@@ -163,6 +163,7 @@ export const CONTEXT_KEYS = {
 } as const;
 export const SETTINGS = {
   cliPath: 'kicadstudio.kicadCliPath',
+  cliCommand: 'kicadstudio.kicadCliCommand',
   kicadPath: 'kicadstudio.kicadPath',
   outputDir: 'kicadstudio.defaultOutputDir',
   gerberPrecision: 'kicadstudio.gerber.precision',

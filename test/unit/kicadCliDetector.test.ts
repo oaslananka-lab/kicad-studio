@@ -114,8 +114,57 @@ describe('KiCadCliDetector', () => {
       expect.arrayContaining([
         '/usr/bin/kicad-cli',
         '/usr/local/bin/kicad-cli',
-        '/snap/bin/kicad-cli'
+        '/snap/bin/kicad-cli',
+        'flatpak'
       ])
+    );
+  });
+
+  it('detects a structured Flatpak command without using a shell string', async () => {
+    __setConfiguration({
+      'kicadstudio.kicadCliPath': '',
+      'kicadstudio.kicadCliCommand': {
+        command: 'flatpak',
+        args: ['run', '--command=kicad-cli', 'org.kicad.KiCad']
+      }
+    });
+    const detector = new KiCadCliDetector();
+    const existsSyncMock = fs.existsSync as unknown as jest.Mock;
+    const spawnSyncMock = childProcess.spawnSync as unknown as jest.Mock;
+
+    existsSyncMock.mockReturnValue(false);
+    spawnSyncMock.mockImplementation((command: string, args: string[]) => {
+      if (
+        command === 'flatpak' &&
+        args.join(' ') === 'run --command=kicad-cli org.kicad.KiCad --version'
+      ) {
+        return {
+          status: 0,
+          stdout: 'KiCad 9.0.3',
+          stderr: ''
+        };
+      }
+      return {
+        status: 1,
+        stdout: '',
+        stderr: ''
+      };
+    });
+
+    const detected = await detector.detect();
+
+    expect(detected).toEqual(
+      expect.objectContaining({
+        path: 'flatpak',
+        args: ['run', '--command=kicad-cli', 'org.kicad.KiCad'],
+        source: 'settings-command',
+        version: '9.0.3'
+      })
+    );
+    expect(spawnSyncMock).toHaveBeenCalledWith(
+      'flatpak',
+      ['run', '--command=kicad-cli', 'org.kicad.KiCad', '--version'],
+      { encoding: 'utf8' }
     );
   });
 
@@ -171,9 +220,10 @@ describe('KiCadCliDetector', () => {
     const detector = new KiCadCliDetector() as any;
     detector.detect = jest.fn().mockResolvedValue({
       path: 'C:\\KiCad\\bin\\kicad-cli.exe',
+      args: ['run', '--command=kicad-cli', 'org.kicad.KiCad'],
       version: '9.0.1',
       versionLabel: 'KiCad 9.0.1',
-      source: 'settings'
+      source: 'settings-command'
     });
     const spawnSyncMock = childProcess.spawnSync as unknown as jest.Mock;
     spawnSyncMock.mockReturnValue({
@@ -186,6 +236,19 @@ describe('KiCadCliDetector', () => {
     await expect(detector.hasCapability('bom')).resolves.toBe(true);
 
     expect(spawnSyncMock).toHaveBeenCalledTimes(1);
+    expect(spawnSyncMock).toHaveBeenCalledWith(
+      'C:\\KiCad\\bin\\kicad-cli.exe',
+      [
+        'run',
+        '--command=kicad-cli',
+        'org.kicad.KiCad',
+        'sch',
+        'export',
+        'bom',
+        '--help'
+      ],
+      { encoding: 'utf8' }
+    );
   });
 
   it('reads and caches command help for option/format probes', async () => {

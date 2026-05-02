@@ -118,9 +118,20 @@ code --install-extension oaslananka.kicadstudio
 
 - Windows: KiCad Studio auto-checks common `Program Files` KiCad locations, including KiCad 10.
 - macOS: it checks the KiCad app bundle and common Homebrew paths.
-- Linux: it checks standard binary locations such as `/usr/bin`, `/usr/local/bin`, and `~/.local/bin`.
+- Linux: it checks standard binary locations such as `/usr/bin`, `/usr/local/bin`, `~/.local/bin`, and KiCad Flatpak through `flatpak run --command=kicad-cli org.kicad.KiCad`.
 
-If detection fails, set `kicadstudio.kicadCliPath` manually. More detail lives in [docs/installation.md](docs/installation.md).
+If detection fails for a direct executable, set `kicadstudio.kicadCliPath` manually. For Flatpak or another launcher that needs arguments, use the structured `kicadstudio.kicadCliCommand` object instead of a shell command string:
+
+```json
+{
+  "kicadstudio.kicadCliCommand": {
+    "command": "flatpak",
+    "args": ["run", "--command=kicad-cli", "org.kicad.KiCad"]
+  }
+}
+```
+
+More detail lives in [docs/installation.md](docs/installation.md).
 
 ## Key Commands
 
@@ -158,6 +169,7 @@ If detection fails, set `kicadstudio.kicadCliPath` manually. More detail lives i
 Important settings include:
 
 - `kicadstudio.kicadCliPath`
+- `kicadstudio.kicadCliCommand`
 - `kicadstudio.kicadPath`
 - `kicadstudio.ai.provider`
 - `kicadstudio.ai.model`
@@ -189,7 +201,8 @@ Important settings include:
 ### `kicad-cli` not found
 
 - Run `KiCad: Detect kicad-cli`.
-- Set `kicadstudio.kicadCliPath` if KiCad lives in a custom location.
+- Set `kicadstudio.kicadCliPath` if KiCad lives in a custom executable location.
+- Set `kicadstudio.kicadCliCommand` for Flatpak, for example `flatpak` with `["run", "--command=kicad-cli", "org.kicad.KiCad"]`.
 - Check [docs/installation.md](docs/installation.md) for per-platform setup notes.
 
 ### MCP not connected

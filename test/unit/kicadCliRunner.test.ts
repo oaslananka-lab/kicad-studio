@@ -94,6 +94,103 @@ describe('KiCadCliRunner', () => {
     expect(detector.detect).toHaveBeenCalled();
   });
 
+  it('prefixes configured launcher args for KiCad Flatpak without shell execution', async () => {
+    __setConfiguration({});
+    const detector = {
+      detect: jest.fn().mockResolvedValue({
+        path: 'flatpak',
+        args: ['run', '--command=kicad-cli', 'org.kicad.KiCad'],
+        version: '9.0.1',
+        versionLabel: 'KiCad 9.0.1',
+        source: 'settings-command'
+      })
+    };
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+    const spawnMock = childProcess.spawn as unknown as jest.Mock;
+    spawnMock.mockImplementation((command: string, args: string[], options) => {
+      expect(command).toBe('flatpak');
+      expect(args).toEqual([
+        'run',
+        '--command=kicad-cli',
+        'org.kicad.KiCad',
+        'pcb',
+        'drc',
+        'board.kicad_pcb'
+      ]);
+      expect(options).not.toHaveProperty('shell');
+      const child = createChildProcessMock();
+      queueMicrotask(() => {
+        child.stdout.emit('data', Buffer.from('ok'));
+        child.emit('close', 0);
+      });
+      return child;
+    });
+
+    const runner = new KiCadCliRunner(detector as never, logger as never);
+    const result = await runner.run({
+      command: ['pcb', 'drc', 'board.kicad_pcb'],
+      cwd: tempDir,
+      progressTitle: 'DRC'
+    });
+
+    expect(result.exitCode).toBe(0);
+    expect(logger.info).toHaveBeenCalledWith(
+      'Running flatpak run --command=kicad-cli org.kicad.KiCad pcb drc board.kicad_pcb'
+    );
+  });
+
+  it('passes executable paths with spaces and shell metacharacter arguments literally', async () => {
+    __setConfiguration({});
+    const detector = {
+      detect: jest.fn().mockResolvedValue({
+        path: 'C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe',
+        version: '10.0.1',
+        versionLabel: 'KiCad 10.0.1',
+        source: 'settings'
+      })
+    };
+    const logger = {
+      info: jest.fn(),
+      warn: jest.fn(),
+      error: jest.fn(),
+      debug: jest.fn()
+    };
+    const spawnMock = childProcess.spawn as unknown as jest.Mock;
+    spawnMock.mockImplementation((command: string, args: string[], options) => {
+      expect(command).toBe(
+        'C:\\Program Files\\KiCad\\10.0\\bin\\kicad-cli.exe'
+      );
+      expect(args).toEqual([
+        'pcb',
+        'export',
+        'gerbers',
+        '--output',
+        'fab;rm -rf ignored'
+      ]);
+      expect(options).not.toHaveProperty('shell');
+      const child = createChildProcessMock();
+      queueMicrotask(() => {
+        child.stdout.emit('data', Buffer.from('ok'));
+        child.emit('close', 0);
+      });
+      return child;
+    });
+
+    const runner = new KiCadCliRunner(detector as never, logger as never);
+    const result = await runner.run({
+      command: ['pcb', 'export', 'gerbers', '--output', 'fab;rm -rf ignored'],
+      cwd: tempDir,
+      progressTitle: 'Export'
+    });
+
+    expect(result.exitCode).toBe(0);
+  });
+
   it('raises CliExitError when kicad-cli exits non-zero', async () => {
     __setConfiguration({});
     const detector = {
