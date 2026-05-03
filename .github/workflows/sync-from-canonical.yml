@@ -14,6 +14,10 @@ concurrency:
   group: sync-from-canonical
   cancel-in-progress: false
 
+env:
+  CANONICAL_REPO: oaslananka/kicad-studio
+  FAILURE_ISSUE_TITLE: Sync from canonical workflow run failed
+
 jobs:
   sync:
     if: github.repository == 'oaslananka-lab/kicad-studio'
@@ -21,46 +25,173 @@ jobs:
     timeout-minutes: 10
     permissions:
       contents: write
+    outputs:
+      summary: ${{ steps.sync.outputs.summary }}
+      details: ${{ steps.sync.outputs.details }}
+      drift: ${{ steps.sync.outputs.drift }}
     steps:
       - name: Checkout org mirror
         uses: actions/checkout@0c366fd6a839edf440554fa01a7085ccba70ac98
         with:
           fetch-depth: 0
-          token: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN || github.token }}
 
-      - name: Pull from canonical and replay
+      - name: Validate token availability
+        id: token_check
+        env:
+          HAS_SERVICE_TOKEN: ${{ secrets.DOPPLER_GITHUB_SERVICE_TOKEN != '' }}
         run: |
           set -euo pipefail
+          if [ "$HAS_SERVICE_TOKEN" != "true" ] && [ -z "${GITHUB_TOKEN:-}" ]; then
+            echo "Missing token: neither DOPPLER_GITHUB_SERVICE_TOKEN nor GITHUB_TOKEN is available." >&2
+            echo "summary=missing-token" >> "$GITHUB_OUTPUT"
+            echo "details=Workflow has no usable authentication token. Configure a GitHub App token or a minimally scoped token with contents:write for this repository." >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
+
+      - name: Sync branches/tags and detect drift
+        id: sync
+        env:
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          set -euo pipefail
+
+          echo "summary=ok" >> "$GITHUB_OUTPUT"
+          echo "details=Sync completed successfully." >> "$GITHUB_OUTPUT"
+          echo "drift=false" >> "$GITHUB_OUTPUT"
+
           git config user.name  "oaslananka-lab[bot]"
           git config user.email "oaslananka-lab@users.noreply.github.com"
 
-          git remote add canonical "https://github.com/oaslananka/kicad-studio.git"
+          git remote add canonical "https://github.com/${CANONICAL_REPO}.git"
           git fetch canonical --prune --tags
+          git fetch origin --prune --tags
 
-          # Replay every canonical branch into the org mirror
+          canonical_main="$(git rev-parse refs/remotes/canonical/main)"
+          origin_main="$(git rev-parse refs/remotes/origin/main)"
+          if [ "$canonical_main" != "$origin_main" ]; then
+            echo "drift=true" >> "$GITHUB_OUTPUT"
+            echo "Drift detected: canonical/main=$canonical_main origin/main=$origin_main"
+          else
+            echo "No drift detected on main."
+          fi
+
           for ref in $(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/canonical); do
             [ "$ref" = "HEAD" ] && continue
+
+            canonical_sha="$(git rev-parse "refs/remotes/canonical/${ref}")"
+            local_sha=""
             if git show-ref --verify --quiet "refs/remotes/origin/${ref}"; then
               local_sha="$(git rev-parse "refs/remotes/origin/${ref}")"
-            else
-              local_sha=""
             fi
-            canonical_sha="$(git rev-parse "refs/remotes/canonical/${ref}")"
+
             if [ "$local_sha" = "$canonical_sha" ]; then
               echo "Branch ${ref} already matches canonical."
               continue
             fi
-            # Push canonical branch state to org mirror; fail if branch protection blocks it.
-            git push origin "refs/remotes/canonical/${ref}:refs/heads/${ref}"
+
+            set +e
+            push_output="$(git push origin "refs/remotes/canonical/${ref}:refs/heads/${ref}" 2>&1)"
+            rc=$?
+            set -e
+            if [ $rc -ne 0 ]; then
+              echo "$push_output" >&2
+              summary="push-failed"
+              details="Failed to update branch ${ref}."
+              if printf '%s' "$push_output" | grep -qiE 'protected branch hook declined|protected branch'; then
+                summary="protected-branch"
+                details="Push to ${ref} was blocked by branch protection. Owner-only action: either allow this workflow's GitHub App/token to bypass protection for this repository or perform a manual sync for protected branches. Do not weaken branch protection globally."
+              elif printf '%s' "$push_output" | grep -qi 'non-fast-forward'; then
+                summary="non-fast-forward"
+                details="Non-fast-forward rejection while syncing ${ref}. Investigate divergent history in oaslananka-lab/kicad-studio:${ref} and reconcile before retrying."
+              elif printf '%s' "$push_output" | grep -qiE 'permission denied|403|insufficient|not allowed'; then
+                summary="permission"
+                details="Permission error while pushing ${ref}. Use a GitHub App installation token or minimally scoped token with contents:write on this repository."
+              fi
+              echo "summary=${summary}" >> "$GITHUB_OUTPUT"
+              echo "details=${details}" >> "$GITHUB_OUTPUT"
+              exit 1
+            fi
           done
 
-          # Replay tags
-          git push origin --tags
+          set +e
+          tags_output="$(git push origin --tags 2>&1)"
+          tags_rc=$?
+          set -e
+          if [ $tags_rc -ne 0 ]; then
+            echo "$tags_output" >&2
+            echo "summary=push-failed" >> "$GITHUB_OUTPUT"
+            echo "details=Failed to mirror tags. Confirm token permissions (contents:write) and protection settings." >> "$GITHUB_OUTPUT"
+            exit 1
+          fi
 
-          # Prune branches that no longer exist on canonical
           for short in $(git for-each-ref --format='%(refname:lstrip=3)' refs/remotes/origin); do
             [ "$short" = "HEAD" ] && continue
             if ! git show-ref --verify --quiet "refs/remotes/canonical/${short}"; then
-              git push origin --delete "$short"
+              set +e
+              del_output="$(git push origin --delete "$short" 2>&1)"
+              del_rc=$?
+              set -e
+              if [ $del_rc -ne 0 ]; then
+                echo "$del_output" >&2
+                echo "summary=permission" >> "$GITHUB_OUTPUT"
+                echo "details=Failed to delete stale branch ${short}. Owner-only action may be required if branch protection disallows deletion." >> "$GITHUB_OUTPUT"
+                exit 1
+              fi
             fi
           done
+
+  notify_failure:
+    if: ${{ failure() && github.repository == 'oaslananka-lab/kicad-studio' }}
+    needs: [sync]
+    runs-on: ubuntu-latest
+    permissions:
+      issues: write
+      contents: read
+    steps:
+      - name: Create or update deduplicated failure issue
+        uses: actions/github-script@v7
+        env:
+          FAILURE_SUMMARY: ${{ needs.sync.outputs.summary || 'unknown' }}
+          FAILURE_DETAILS: ${{ needs.sync.outputs.details || 'No details captured.' }}
+          DRIFT: ${{ needs.sync.outputs.drift || 'unknown' }}
+        with:
+          script: |
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const title = process.env.FAILURE_ISSUE_TITLE;
+            const summary = process.env.FAILURE_SUMMARY;
+            const details = process.env.FAILURE_DETAILS;
+            const drift = process.env.DRIFT;
+            const runUrl = `${context.serverUrl}/${owner}/${repo}/actions/runs/${context.runId}`;
+
+            const body = [
+              `The **${context.workflow}** workflow failed.`,
+              '',
+              `- Run: ${runUrl}`,
+              `- Trigger: ${context.eventName}`,
+              `- Branch drift (canonical/main vs mirror main): **${drift}**`,
+              `- Failure class: **${summary}**`,
+              `- Details: ${details}`,
+              '',
+              'Owner-only notes:',
+              '- If failure class is `protected-branch`, keep branch protection enabled and grant bypass only to the approved GitHub App/token for this repository.',
+              '- If failure class is `permission`, ensure token semantics are least-privilege (`contents:write` here) and prefer GitHub App installation tokens over broad PATs.',
+              '- Do not auto-merge; investigate and rerun after corrective action.'
+            ].join('\n');
+
+            const { data: issues } = await github.rest.issues.listForRepo({
+              owner,
+              repo,
+              state: 'open',
+              per_page: 100
+            });
+            const existing = issues.find((i) => i.title === title);
+
+            if (existing) {
+              await github.rest.issues.createComment({ owner, repo, issue_number: existing.number, body });
+              await github.rest.issues.update({ owner, repo, issue_number: existing.number, body });
+              core.info(`Updated existing issue #${existing.number}`);
+            } else {
+              const created = await github.rest.issues.create({ owner, repo, title, body });
+              core.info(`Created issue #${created.data.number}`);
+            }
